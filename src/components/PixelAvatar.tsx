@@ -518,14 +518,22 @@ function drawHair(
     return
   }
 
-  // Cap of hair
+  // Cap of hair — smooth bands, not noisy dither
   for (let y = -2; y < headRy - 4; y++) {
     const span = Math.round(Math.sqrt(Math.max(0, 1 - ((y + 2) / (headRy + 2)) ** 2)) * (headRx + 2))
     for (let x = -span; x <= span; x++) {
       const fringe = y < 2 && Math.abs(x) < span - 1
-      const c = (x + y) % 3 === 0 ? light : (x * y) % 5 === 0 ? shadeC : mid
-      if (y < headRy * 0.55 || fringe) buf.put(cx + x, top + y, c, 'head')
+      if (!(y < headRy * 0.55 || fringe)) continue
+      const edge = Math.abs(x) > span - 2 || y <= 0
+      const hi = x + y < -2
+      const c = edge ? shadeC : hi ? light : mid
+      buf.put(cx + x, top + y, c, 'head')
     }
+  }
+  // Bangs
+  for (let x = -Math.round(headRx * 0.7); x <= Math.round(headRx * 0.7); x++) {
+    const drop = 2 + (Math.abs(x) % 3 === 0 ? 2 : 1)
+    for (let y = 0; y < drop; y++) buf.put(cx + x, headCy - 6 + y, Math.abs(x) < 2 ? light : mid, 'head')
   }
 
   if (heroClass === 'rogue') {
@@ -553,11 +561,14 @@ function drawHair(
   }
 
   if (race === 'elf') {
-    // Long flowing locks
+    // Long flowing locks — solid strands with a highlight edge
     for (const side of [-1, 1] as const) {
-      for (let i = 0; i < 28; i++) {
-        const wave = Math.round(Math.sin(i * 0.35) * 1.5)
-        buf.rect(cx + side * (headRx + 1) + wave, headCy + 2 + i, 3, 1, i % 3 ? mid : light, 'head')
+      for (let i = 0; i < 30; i++) {
+        const wave = Math.round(Math.sin(i * 0.28) * 1.2)
+        const x = cx + side * (headRx + 1) + wave
+        buf.rect(x, headCy + 2 + i, 3, 1, mid, 'head')
+        buf.put(x + (side < 0 ? 0 : 2), headCy + 2 + i, light, 'head')
+        buf.put(x + (side < 0 ? 2 : 0), headCy + 2 + i, shadeC, 'head')
       }
     }
   }
@@ -595,9 +606,10 @@ export function PixelAvatar({
   className?: string
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const scale = large ? 3 : 1
-  const displayW = W * scale
-  const displayH = H * scale
+  // Large: ~3× crisp upscale (336×480). Compact nav chip: ~0.45×.
+  const scale = large ? 3 : 0.45
+  const displayW = Math.round(W * scale)
+  const displayH = Math.round(H * scale)
 
   useEffect(() => {
     const canvas = canvasRef.current

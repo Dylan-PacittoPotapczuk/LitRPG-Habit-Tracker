@@ -586,10 +586,10 @@ a {
 }
 
 .class-select-panel {
-  width: min(520px, 100%);
-  max-height: min(92dvh, 900px);
+  width: min(560px, 100%);
+  max-height: min(94dvh, 960px);
   overflow: auto;
-  padding: 22px 18px 20px;
+  padding: 18px 16px 16px;
   border: 1px solid var(--line);
   border-radius: 18px;
   background:
@@ -714,15 +714,25 @@ a {
 }
 
 .class-select-preview .pixel-avatar.large {
-  transform: scale(0.72);
+  transform: scale(0.55);
   transform-origin: center center;
+  margin: -40px 0;
 }
 
 .class-card .pixel-avatar {
-  transform: scale(0.55);
-  transform-origin: top center;
-  height: 88px;
+  width: 50px !important;
+  height: 72px !important;
   overflow: hidden;
+}
+
+.class-card .pixel-avatar canvas {
+  width: 50px !important;
+  height: 72px !important;
+}
+
+.class-grid {
+  overflow-x: auto;
+  padding-bottom: 4px;
 }
 
 .armory-slot {
