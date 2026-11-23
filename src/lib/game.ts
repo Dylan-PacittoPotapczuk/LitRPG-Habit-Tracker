@@ -1,3 +1,4 @@
+import { habitXpForClass } from './classes'
 import { previousDay, todayKey } from './date'
 import {
   ATONEMENT_HEAL,
@@ -6,7 +7,6 @@ import {
   HABIT_XP,
   HABITS,
   HEAL_PER_COMPLETION,
-  LOOT,
   MAX_HP,
   MISS_HP_HIT,
   MISS_XP_LOSS,
@@ -14,16 +14,19 @@ import {
   type AppState,
   type BadgeId,
   type DayRecord,
+  type EquippedLoadout,
   type HabitId,
-  type LootId,
+  type HeroClass,
   type PlayerState,
   type ToastEvent,
   type TodoItem,
   type VibeId,
+  type WearableId,
+  type WearableSlot,
 } from './types'
+import { LEGACY_LOOT_MAP, WEARABLES, WEARABLE_IDS } from './wearables'
 
 export function xpForLevel(level: number): number {
-  // Cumulative XP to reach `level` (level 1 starts at 0)
   if (level <= 1) return 0
   return Math.floor(80 * Math.pow(level - 1, 1.65))
 }
@@ -79,7 +82,7 @@ function emptyDay(date: string): DayRecord {
 export function createInitialState(): AppState {
   const now = todayKey()
   return {
-    version: 1,
+    version: 2,
     player: {
       xp: 0,
       hp: MAX_HP,
@@ -88,8 +91,10 @@ export function createInitialState(): AppState {
       longestStreak: 0,
       habitStreaks: {},
       badges: [],
-      loot: [],
-      equippedLoot: null,
+      loot: ['cloth-tunic'],
+      equipped: { chest: 'cloth-tunic' },
+      gearDamaged: false,
+      heroClass: null,
       title: titleForLevel(1),
       lastPlayedDate: null,
       createdAt: new Date().toISOString(),
@@ -100,6 +105,59 @@ export function createInitialState(): AppState {
   }
 }
 
+/** Migrate v1 (or partial) saves into the class + multi-slot wearable model. */
+export function migrateState(raw: unknown): AppState {
+  const base = createInitialState()
+  if (!raw || typeof raw !== 'object') return base
+  const incoming = raw as {
+    version?: number
+    player?: Partial<PlayerState> & {
+      equippedLoot?: string | null
+      loot?: string[]
+    }
+    days?: Record<string, DayRecord>
+  }
+
+  const player = { ...base.player, ...(incoming.player ?? {}) }
+
+  // Normalize loot ids from legacy names
+  const lootRaw = incoming.player?.loot ?? player.loot ?? []
+  const loot: WearableId[] = []
+  for (const id of lootRaw) {
+    const mapped = (LEGACY_LOOT_MAP[id] ?? id) as WearableId
+    if (WEARABLES[mapped] && !loot.includes(mapped)) loot.push(mapped)
+  }
+  if (!loot.includes('cloth-tunic')) loot.unshift('cloth-tunic')
+  player.loot = loot
+
+  // Build equipped loadout from v2 equipped or v1 single equippedLoot
+  let equipped: EquippedLoadout = { ...(incoming.player?.equipped ?? {}) }
+  if (incoming.player?.equippedLoot) {
+    const mapped = (LEGACY_LOOT_MAP[incoming.player.equippedLoot] ??
+      incoming.player.equippedLoot) as WearableId
+    if (WEARABLES[mapped]) {
+      equipped[WEARABLES[mapped].slot] = mapped
+    }
+  }
+  if (!equipped.chest && loot.includes('cloth-tunic')) {
+    equipped.chest = 'cloth-tunic'
+  }
+  // Drop equipped pieces that aren't owned
+  for (const slot of Object.keys(equipped) as WearableSlot[]) {
+    const id = equipped[slot]
+    if (id && !loot.includes(id)) delete equipped[slot]
+  }
+  player.equipped = equipped
+  player.gearDamaged = Boolean(incoming.player?.gearDamaged)
+  player.heroClass = (incoming.player?.heroClass as HeroClass | null | undefined) ?? null
+
+  return {
+    version: 2,
+    player,
+    days: incoming.days ?? base.days,
+  }
+}
+
 export function ensureDay(state: AppState, date = todayKey()): DayRecord {
   if (!state.days[date]) state.days[date] = emptyDay(date)
   return state.days[date]
@@ -107,6 +165,18 @@ export function ensureDay(state: AppState, date = todayKey()): DayRecord {
 
 function clampHp(player: PlayerState) {
   player.hp = Math.max(0, Math.min(player.maxHp, player.hp))
+}
+
+function maybeClearDamage(player: PlayerState, toasts: ToastEvent[]) {
+  if (player.gearDamaged && player.hp >= player.maxHp) {
+    player.gearDamaged = false
+    toasts.push({
+      id: crypto.randomUUID(),
+      kind: 'heal',
+      title: 'Gear mended',
+      detail: 'Your armor shines again.',
+    })
+  }
 }
 
 function grantBadge(player: PlayerState, id: BadgeId, toasts: ToastEvent[]) {
@@ -121,20 +191,34 @@ function grantBadge(player: PlayerState, id: BadgeId, toasts: ToastEvent[]) {
   })
 }
 
-function grantLootForLevel(player: PlayerState, level: number, toasts: ToastEvent[]) {
-  ;(Object.keys(LOOT) as LootId[]).forEach((id) => {
-    if (LOOT[id].level <= level && !player.loot.includes(id)) {
-      player.loot.push(id)
-      if (!player.equippedLoot) player.equippedLoot = id
-      toasts.push({
-        id: crypto.randomUUID(),
-        kind: 'loot',
-        title: `Loot unlocked: ${LOOT[id].name}`,
-        detail: LOOT[id].blurb,
-      })
-    }
+function grantWearable(player: PlayerState, id: WearableId, toasts: ToastEvent[], reason: string) {
+  if (player.loot.includes(id)) return false
+  player.loot.push(id)
+  const w = WEARABLES[id]
+  const slotEmpty = !player.equipped[w.slot]
+  if (slotEmpty) player.equipped[w.slot] = id
+  toasts.push({
+    id: crypto.randomUUID(),
+    kind: 'loot',
+    title: `Loot unlocked: ${w.name}`,
+    detail: reason || w.blurb,
   })
   if (player.loot.length >= 3) grantBadge(player, 'loot-hoarder', toasts)
+  return true
+}
+
+function checkUnlocks(player: PlayerState, toasts: ToastEvent[]) {
+  const level = levelFromXp(player.xp)
+  for (const id of WEARABLE_IDS) {
+    const w = WEARABLES[id]
+    if (player.loot.includes(id)) continue
+    const levelOk = w.level > 0 && level >= w.level
+    const streakOk = w.streak > 0 && player.dayStreak >= w.streak
+    // Full-clear-only pieces (no level/streak gate) wait for loot rolls.
+    if (!levelOk && !streakOk) continue
+    const reason = levelOk ? `Reached level ${level}` : `${player.dayStreak}-day streak`
+    grantWearable(player, id, toasts, reason)
+  }
 }
 
 function applyXp(player: PlayerState, amount: number, toasts: ToastEvent[], label: string) {
@@ -158,7 +242,7 @@ function applyXp(player: PlayerState, amount: number, toasts: ToastEvent[], labe
       title: `Level up! → ${after}`,
       detail: player.title,
     })
-    grantLootForLevel(player, after, toasts)
+    checkUnlocks(player, toasts)
   }
 }
 
@@ -167,6 +251,24 @@ function dayHadActivity(day: DayRecord | undefined): boolean {
   const habits = Object.values(day.habitCompletions).some(Boolean)
   const todos = day.todos.some((t) => t.completedOn)
   return habits || todos
+}
+
+function applyMissPenalty(player: PlayerState, day: DayRecord, toasts: ToastEvent[]) {
+  if (day.penaltyApplied) return
+  day.penaltyApplied = true
+  day.xpLost += MISS_XP_LOSS
+  day.hpDelta -= MISS_HP_HIT
+  applyXp(player, -MISS_XP_LOSS, toasts, 'Missed previous day')
+  player.hp -= MISS_HP_HIT
+  clampHp(player)
+  player.dayStreak = 0
+  player.gearDamaged = true
+  toasts.push({
+    id: crypto.randomUUID(),
+    kind: 'penalty',
+    title: 'The realm noticed your absence',
+    detail: `−${MISS_XP_LOSS} XP · −${MISS_HP_HIT} HP. Armor scuffed until you heal.`,
+  })
 }
 
 /** Apply missed-day penalties when opening a new calendar day. */
@@ -184,58 +286,52 @@ export function rolloverIfNeeded(state: AppState, today = todayKey()): ToastEven
 
   if (last === today) return toasts
 
-  // Only penalize the immediate previous day if it had no activity and we skipped past it
   const prev = previousDay(today)
   const prevDay = state.days[prev]
   const missed = !dayHadActivity(prevDay)
 
   if (missed && last !== prev) {
-    // Came back after a gap — previous day empty
     const day = ensureDay(state, prev)
-    if (!day.penaltyApplied) {
-      day.penaltyApplied = true
-      day.xpLost += MISS_XP_LOSS
-      day.hpDelta -= MISS_HP_HIT
-      applyXp(player, -MISS_XP_LOSS, toasts, 'Missed previous day')
-      player.hp -= MISS_HP_HIT
-      clampHp(player)
-      player.dayStreak = 0
-      toasts.push({
-        id: crypto.randomUUID(),
-        kind: 'penalty',
-        title: 'The realm noticed your absence',
-        detail: `−${MISS_XP_LOSS} XP · −${MISS_HP_HIT} HP. Heal by completing quests or atone.`,
-      })
-    }
+    applyMissPenalty(player, day, toasts)
   } else if (missed && last === prev) {
-    // Opened today; yesterday empty after playing yesterday start — still a miss if no activity
     const day = ensureDay(state, prev)
-    if (!day.penaltyApplied && !dayHadActivity(day)) {
-      day.penaltyApplied = true
-      day.xpLost += MISS_XP_LOSS
-      day.hpDelta -= MISS_HP_HIT
-      applyXp(player, -MISS_XP_LOSS, toasts, 'Missed previous day')
-      player.hp -= MISS_HP_HIT
-      clampHp(player)
-      player.dayStreak = 0
-      toasts.push({
-        id: crypto.randomUUID(),
-        kind: 'penalty',
-        title: 'The realm noticed your absence',
-        detail: `−${MISS_XP_LOSS} XP · −${MISS_HP_HIT} HP. Heal by completing quests or atone.`,
-      })
-    }
-  } else if (dayHadActivity(prevDay)) {
-    // Continuity already counted when they completed; leave streak
+    if (!dayHadActivity(day)) applyMissPenalty(player, day, toasts)
   }
 
-  // If gap > 1 day, reset streak
   if (last && last < prev) {
     player.dayStreak = 0
   }
 
   player.lastPlayedDate = today
   return toasts
+}
+
+function rollFullClearLoot(player: PlayerState, toasts: ToastEvent[]) {
+  const pool = WEARABLE_IDS.filter(
+    (id) => WEARABLES[id].fullClearLoot && !player.loot.includes(id),
+  )
+  if (!pool.length) {
+    if (Math.random() < 0.35) {
+      toasts.push({
+        id: crypto.randomUUID(),
+        kind: 'loot',
+        title: 'A spark of fortune!',
+        detail: 'Full clear shimmer — keep the streak for real loot unlocks.',
+      })
+    }
+    return
+  }
+  if (Math.random() < 0.45) {
+    const pick = pool[Math.floor(Math.random() * pool.length)]
+    grantWearable(player, pick, toasts, 'Full-clear loot roll')
+  } else {
+    toasts.push({
+      id: crypto.randomUUID(),
+      kind: 'loot',
+      title: 'A spark of fortune!',
+      detail: 'The chest rattled — no piece this time. Tomorrow, perhaps.',
+    })
+  }
 }
 
 function recomputeFullClear(day: DayRecord, player: PlayerState, toasts: ToastEvent[]) {
@@ -245,15 +341,7 @@ function recomputeFullClear(day: DayRecord, player: PlayerState, toasts: ToastEv
     day.xpEarned += FULL_CLEAR_BONUS
     applyXp(player, FULL_CLEAR_BONUS, toasts, 'Full clear bonus')
     grantBadge(player, 'full-clear', toasts)
-    // Soft loot chance: if unlucky level gap, still celebrate
-    if (Math.random() < 0.35) {
-      toasts.push({
-        id: crypto.randomUUID(),
-        kind: 'loot',
-        title: 'A spark of fortune!',
-        detail: 'Full clear shimmer — keep the streak for real loot unlocks.',
-      })
-    }
+    rollFullClearLoot(player, toasts)
   }
 }
 
@@ -269,8 +357,16 @@ export function toggleHabit(
   day.habitCompletions[habitId] = !was
 
   if (!was) {
-    day.xpEarned += HABIT_XP
-    applyXp(player, HABIT_XP, toasts, HABITS.find((h) => h.id === habitId)?.title ?? 'Habit')
+    const xp = habitXpForClass(HABIT_XP, habitId, player.heroClass)
+    const bias =
+      xp > HABIT_XP ? ` (class +${xp - HABIT_XP})` : ''
+    day.xpEarned += xp
+    applyXp(
+      player,
+      xp,
+      toasts,
+      `${HABITS.find((h) => h.id === habitId)?.title ?? 'Habit'}${bias}`,
+    )
     player.hp += HEAL_PER_COMPLETION
     clampHp(player)
     toasts.push({
@@ -279,13 +375,15 @@ export function toggleHabit(
       title: `+${HEAL_PER_COMPLETION} HP`,
       detail: 'Quest completion soothes the spirit',
     })
+    maybeClearDamage(player, toasts)
     player.habitStreaks[habitId] = (player.habitStreaks[habitId] ?? 0) + 1
     grantBadge(player, 'first-quest', toasts)
     maybeBumpStreak(state, date, toasts)
     recomputeFullClear(day, player, toasts)
   } else {
-    day.xpEarned = Math.max(0, day.xpEarned - HABIT_XP)
-    applyXp(player, -HABIT_XP, toasts, 'Unchecked habit')
+    const xp = habitXpForClass(HABIT_XP, habitId, player.heroClass)
+    day.xpEarned = Math.max(0, day.xpEarned - xp)
+    applyXp(player, -xp, toasts, 'Unchecked habit')
     player.habitStreaks[habitId] = Math.max(0, (player.habitStreaks[habitId] ?? 1) - 1)
     if (day.fullClear) {
       day.fullClear = false
@@ -305,10 +403,7 @@ function maybeBumpStreak(state: AppState, date: string, toasts: ToastEvent[]) {
 
   const prev = state.days[previousDay(date)]
   if (dayHadActivity(prev)) {
-    // Continuing — only set if we haven't already counted today as continuation
-    // Heuristic: if lastPlayed was yesterday or streak already running and today first completion
     if (player.lastPlayedDate === previousDay(date) || player.dayStreak > 0) {
-      // Increment only on first activity of the day
       const completions =
         Object.values(day.habitCompletions).filter(Boolean).length +
         day.todos.filter((t) => t.completedOn).length
@@ -319,7 +414,6 @@ function maybeBumpStreak(state: AppState, date: string, toasts: ToastEvent[]) {
   } else if (player.dayStreak === 0) {
     player.dayStreak = 1
   } else {
-    // First activity today without yesterday — restart at 1 unless already set today
     const completions =
       Object.values(day.habitCompletions).filter(Boolean).length +
       day.todos.filter((t) => t.completedOn).length
@@ -329,6 +423,7 @@ function maybeBumpStreak(state: AppState, date: string, toasts: ToastEvent[]) {
   player.longestStreak = Math.max(player.longestStreak, player.dayStreak)
   if (player.dayStreak >= 7) grantBadge(player, 'week-warrior', toasts)
   if (player.dayStreak >= 30) grantBadge(player, 'iron-will', toasts)
+  checkUnlocks(player, toasts)
 }
 
 export function setVibe(state: AppState, vibe: VibeId, date = todayKey()): ToastEvent[] {
@@ -374,6 +469,7 @@ export function toggleTodo(state: AppState, todoId: string, date = todayKey()): 
     applyXp(player, TODO_XP, toasts, todo.title)
     player.hp += HEAL_PER_COMPLETION
     clampHp(player)
+    maybeClearDamage(player, toasts)
     grantBadge(player, 'first-quest', toasts)
     maybeBumpStreak(state, date, toasts)
   } else {
@@ -400,6 +496,7 @@ export function atone(state: AppState, date = todayKey()): ToastEvent[] {
   clampHp(state.player)
   day.hpDelta += ATONEMENT_HEAL
   grantBadge(state.player, 'atoned', toasts)
+  maybeClearDamage(state.player, toasts)
   toasts.push({
     id: crypto.randomUUID(),
     kind: 'heal',
@@ -409,14 +506,60 @@ export function atone(state: AppState, date = todayKey()): ToastEvent[] {
   return toasts
 }
 
-export function equipLoot(state: AppState, id: LootId | null): void {
-  if (id && !state.player.loot.includes(id)) return
-  state.player.equippedLoot = id
+export function equipWearable(state: AppState, id: WearableId | null, slot?: WearableSlot): void {
+  if (!id) {
+    if (slot) delete state.player.equipped[slot]
+    return
+  }
+  if (!state.player.loot.includes(id)) return
+  const w = WEARABLES[id]
+  const target = slot ?? w.slot
+  if (target !== w.slot) return
+  const current = state.player.equipped[target]
+  if (current === id) {
+    delete state.player.equipped[target]
+  } else {
+    state.player.equipped[target] = id
+  }
+}
+
+/** @deprecated use equipWearable */
+export function equipLoot(state: AppState, id: WearableId | null): void {
+  equipWearable(state, id)
+}
+
+export function chooseClass(state: AppState, heroClass: HeroClass): ToastEvent[] {
+  state.player.heroClass = heroClass
+  if (!state.player.loot.includes('cloth-tunic')) {
+    state.player.loot.unshift('cloth-tunic')
+  }
+  if (!state.player.equipped.chest) {
+    state.player.equipped.chest = 'cloth-tunic'
+  }
+  return [
+    {
+      id: crypto.randomUUID(),
+      kind: 'info',
+      title: `Class chosen: ${heroClass[0].toUpperCase()}${heroClass.slice(1)}`,
+      detail: 'Your soft habit XP bias is active. Respec anytime in Settings.',
+    },
+  ]
+}
+
+export function respecClass(state: AppState, heroClass: HeroClass): ToastEvent[] {
+  state.player.heroClass = heroClass
+  return [
+    {
+      id: crypto.randomUUID(),
+      kind: 'info',
+      title: `Respec → ${heroClass[0].toUpperCase()}${heroClass.slice(1)}`,
+      detail: 'XP bias habits updated. Gear stays.',
+    },
+  ]
 }
 
 export function resetToday(state: AppState, date = todayKey()): void {
   const old = state.days[date]
-  // Reverse today's XP roughly by subtracting xpEarned (best-effort for demo)
   if (old) {
     state.player.xp = Math.max(0, state.player.xp - old.xpEarned + old.xpLost)
     state.player.title = titleForLevel(levelFromXp(state.player.xp))
@@ -434,4 +577,11 @@ export function needsAtonement(state: AppState, date = todayKey()): boolean {
   const prev = state.days[previousDay(date)]
   const day = state.days[date]
   return !!(prev?.penaltyApplied && day && !day.atonementDone)
+}
+
+/** Demo helper: unlock a wearable as if looted. */
+export function debugGrantWearable(state: AppState, id: WearableId): ToastEvent[] {
+  const toasts: ToastEvent[] = []
+  grantWearable(state.player, id, toasts, 'Demo unlock')
+  return toasts
 }

@@ -1,9 +1,20 @@
 import { useState } from 'react'
+import { CLASSES } from '../lib/classes'
+import type { HeroClass } from '../lib/types'
 import { useStore } from '../lib/store'
 
 export function SettingsPage() {
-  const { demoResetDay, exportJson, factoryReset, seedDemoHistory } = useStore()
+  const {
+    state,
+    demoResetDay,
+    exportJson,
+    factoryReset,
+    seedDemoHistory,
+    seedDemoArmory,
+    respec,
+  } = useStore()
   const [copied, setCopied] = useState(false)
+  const current = state.player.heroClass
 
   async function onExport() {
     const json = exportJson()
@@ -33,6 +44,30 @@ export function SettingsPage() {
       </section>
 
       <section className="section">
+        <h2>Class respec</h2>
+        <p className="lede">
+          Current:{' '}
+          <strong style={{ color: 'var(--copper-bright)' }}>
+            {current ? current[0].toUpperCase() + current.slice(1) : 'None'}
+          </strong>
+          . Soft XP bias changes; gear and progress stay.
+        </p>
+        <div className="respec-grid">
+          {CLASSES.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className={`btn ${current === c.id ? 'btn-primary' : 'btn-ghost'}`}
+              disabled={current === c.id}
+              onClick={() => respec(c.id as HeroClass)}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="section">
         <h2>Demo tools</h2>
         <div className="settings-list">
           <button type="button" className="btn btn-ghost" onClick={demoResetDay}>
@@ -40,6 +75,9 @@ export function SettingsPage() {
           </button>
           <button type="button" className="btn btn-ghost" onClick={seedDemoHistory}>
             Seed chronicle history
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={seedDemoArmory}>
+            Seed demo armory
           </button>
           <button type="button" className="btn btn-ghost" onClick={onExport}>
             {copied ? 'Copied JSON' : 'Export JSON'}
