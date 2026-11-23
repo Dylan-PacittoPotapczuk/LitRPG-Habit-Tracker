@@ -489,26 +489,27 @@ a {
 }
 
 .avatar-stage {
-  width: min(280px, 70vw);
-  aspect-ratio: 1;
+  width: min(360px, 88vw);
+  min-height: 420px;
+  aspect-ratio: 112 / 160;
   margin: 0 auto 18px;
-  border-radius: 50%;
+  border-radius: 28px;
   position: relative;
   display: grid;
   place-items: center;
   background:
-    radial-gradient(circle at 50% 40%, rgba(240, 176, 106, 0.25), transparent 55%),
-    radial-gradient(circle at 50% 80%, rgba(61, 143, 106, 0.35), transparent 50%),
+    radial-gradient(circle at 50% 35%, rgba(240, 176, 106, 0.28), transparent 55%),
+    radial-gradient(circle at 50% 85%, rgba(61, 143, 106, 0.32), transparent 50%),
     repeating-conic-gradient(
       from 0deg,
       rgba(255, 255, 255, 0.02) 0deg 90deg,
       transparent 90deg 180deg
     ),
-    rgba(0, 0, 0, 0.25);
+    rgba(0, 0, 0, 0.28);
   background-size:
     auto,
     auto,
-    12px 12px,
+    10px 10px,
     auto;
   border: 1px solid var(--line);
   overflow: hidden;
@@ -516,7 +517,8 @@ a {
 
 .avatar-stage.compact {
   width: 56px;
-  height: 72px;
+  height: 80px;
+  min-height: 0;
   aspect-ratio: auto;
   margin: 0;
   border-radius: 10px;
@@ -696,6 +698,31 @@ a {
 
 .class-confirm {
   width: 100%;
+  flex: 1;
+}
+
+.class-select-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.class-select-actions .class-confirm {
+  width: auto;
+  min-width: 55%;
+}
+
+.class-select-preview .pixel-avatar.large {
+  transform: scale(0.72);
+  transform-origin: center center;
+}
+
+.class-card .pixel-avatar {
+  transform: scale(0.55);
+  transform-origin: top center;
+  height: 88px;
+  overflow: hidden;
 }
 
 .armory-slot {

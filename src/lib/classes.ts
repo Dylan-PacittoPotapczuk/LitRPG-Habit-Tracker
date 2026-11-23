@@ -8,7 +8,6 @@ export interface ClassDef {
   biasHabits: HabitId[]
   biasLabel: string
   palette: {
-    skin: string
     hair: string
     tunic: string
     accent: string
@@ -23,7 +22,6 @@ export const CLASSES: ClassDef[] = [
     biasHabits: ['workout', 'stretch', 'protein'],
     biasLabel: '+workout, stretch, protein',
     palette: {
-      skin: '#c68642',
       hair: '#3a2415',
       tunic: '#8b3a2a',
       accent: '#d4894a',
@@ -36,7 +34,6 @@ export const CLASSES: ClassDef[] = [
     biasHabits: ['reading', 'sign-language'],
     biasLabel: '+reading, sign language',
     palette: {
-      skin: '#dbb08a',
       hair: '#2a2a4a',
       tunic: '#3d4a8b',
       accent: '#7aa2ff',
@@ -49,7 +46,6 @@ export const CLASSES: ClassDef[] = [
     biasHabits: ['steps', 'eat-healthy'],
     biasLabel: '+steps, eat healthy',
     palette: {
-      skin: '#b87a4a',
       hair: '#1e3a28',
       tunic: '#2f6b45',
       accent: '#5ecf96',
@@ -62,7 +58,6 @@ export const CLASSES: ClassDef[] = [
     biasHabits: ['plan-tomorrow', 'text-call', 'make-bed'],
     biasLabel: '+plan, raven, make bed',
     palette: {
-      skin: '#c9a07a',
       hair: '#1a1218',
       tunic: '#3a2a3a',
       accent: '#c45a8c',

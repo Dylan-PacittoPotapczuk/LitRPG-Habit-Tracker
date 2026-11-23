@@ -1,6 +1,7 @@
 import { AvatarPortrait } from '../components/AvatarPortrait'
 import { classDef } from '../lib/classes'
 import { levelFromXp, progressInLevel } from '../lib/game'
+import { raceDef } from '../lib/races'
 import { BADGES, type BadgeId, type WearableId } from '../lib/types'
 import { useStore } from '../lib/store'
 import { SLOT_LABELS, SLOT_ORDER, unlockReason, WEARABLES, WEARABLE_IDS } from '../lib/wearables'
@@ -11,6 +12,7 @@ export function HeroPage() {
   const level = levelFromXp(player.xp)
   const prog = progressInLevel(player.xp)
   const cls = classDef(player.heroClass)
+  const race = raceDef(player.heroRace)
 
   return (
     <>
@@ -19,9 +21,11 @@ export function HeroPage() {
         <div className="hero-meta">
           <h1>{player.title}</h1>
           <p>
-            {cls ? (
+            {race || cls ? (
               <>
-                <span style={{ color: cls.palette.accent }}>{cls.name}</span>
+                <span style={{ color: race?.skin.light ?? cls?.palette.accent }}>
+                  {[race?.name, cls?.name].filter(Boolean).join(' ')}
+                </span>
                 {' · '}
               </>
             ) : null}

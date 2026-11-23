@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CLASSES } from '../lib/classes'
-import type { HeroClass } from '../lib/types'
+import { RACES } from '../lib/races'
+import type { HeroClass, HeroRace } from '../lib/types'
 import { useStore } from '../lib/store'
 
 export function SettingsPage() {
@@ -12,9 +13,11 @@ export function SettingsPage() {
     seedDemoHistory,
     seedDemoArmory,
     respec,
+    respecHeroRace,
   } = useStore()
   const [copied, setCopied] = useState(false)
-  const current = state.player.heroClass
+  const currentClass = state.player.heroClass
+  const currentRace = state.player.heroRace
 
   async function onExport() {
     const json = exportJson()
@@ -44,21 +47,45 @@ export function SettingsPage() {
       </section>
 
       <section className="section">
+        <h2>Race respec</h2>
+        <p className="lede">
+          Current:{' '}
+          <strong style={{ color: 'var(--copper-bright)' }}>
+            {currentRace ? currentRace[0].toUpperCase() + currentRace.slice(1) : 'None'}
+          </strong>
+          . Silhouette and skin change; class and gear stay.
+        </p>
+        <div className="respec-grid">
+          {RACES.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              className={`btn ${currentRace === r.id ? 'btn-primary' : 'btn-ghost'}`}
+              disabled={currentRace === r.id}
+              onClick={() => respecHeroRace(r.id as HeroRace)}
+            >
+              {r.name}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="section">
         <h2>Class respec</h2>
         <p className="lede">
           Current:{' '}
           <strong style={{ color: 'var(--copper-bright)' }}>
-            {current ? current[0].toUpperCase() + current.slice(1) : 'None'}
+            {currentClass ? currentClass[0].toUpperCase() + currentClass.slice(1) : 'None'}
           </strong>
-          . Soft XP bias changes; gear and progress stay.
+          . Soft XP bias changes; race and gear stay.
         </p>
         <div className="respec-grid">
           {CLASSES.map((c) => (
             <button
               key={c.id}
               type="button"
-              className={`btn ${current === c.id ? 'btn-primary' : 'btn-ghost'}`}
-              disabled={current === c.id}
+              className={`btn ${currentClass === c.id ? 'btn-primary' : 'btn-ghost'}`}
+              disabled={currentClass === c.id}
               onClick={() => respec(c.id as HeroClass)}
             >
               {c.name}

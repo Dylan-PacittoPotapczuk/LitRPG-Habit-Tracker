@@ -14,6 +14,8 @@ export type VibeId = 'radiant' | 'meh-dragon' | 'chaotic' | 'weary' | 'fire'
 
 export type HeroClass = 'warrior' | 'mage' | 'ranger' | 'rogue'
 
+export type HeroRace = 'human' | 'elf' | 'dwarf' | 'orc'
+
 export type WearableSlot = 'chest' | 'weapon' | 'cape' | 'accessory'
 
 export type WearableId =
@@ -86,6 +88,7 @@ export interface PlayerState {
   /** Temporary scuffed look after a miss day until healed. */
   gearDamaged: boolean
   heroClass: HeroClass | null
+  heroRace: HeroRace | null
   title: string
   lastPlayedDate: string | null
   createdAt: string

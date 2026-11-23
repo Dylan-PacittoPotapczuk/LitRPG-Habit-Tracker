@@ -13,7 +13,7 @@ import { addDays, todayKey } from './date'
 import {
   addTodo,
   atone,
-  chooseClass,
+  chooseHero,
   createInitialState,
   debugGrantWearable,
   equipWearable,
@@ -21,6 +21,7 @@ import {
   removeTodo,
   resetToday,
   respecClass,
+  respecRace,
   rolloverIfNeeded,
   setVibe,
   toggleHabit,
@@ -32,6 +33,7 @@ import type {
   AppState,
   HabitId,
   HeroClass,
+  HeroRace,
   ToastEvent,
   VibeId,
   WearableId,
@@ -53,8 +55,9 @@ interface StoreApi {
   deleteTodo: (id: string) => void
   doAtone: () => void
   setEquipped: (id: WearableId | null, slot?: WearableSlot) => void
-  pickClass: (id: HeroClass) => void
+  pickHero: (race: HeroRace, heroClass: HeroClass) => void
   respec: (id: HeroClass) => void
+  respecHeroRace: (id: HeroRace) => void
   demoResetDay: () => void
   exportJson: () => string
   factoryReset: () => Promise<void>
@@ -135,7 +138,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       dismissToast: (id) => setToasts((t) => t.filter((x) => x.id !== id)),
       today,
       showAtonement: state ? needsAtonement(state, today) : false,
-      needsClassSelect: !!state && !state.player.heroClass,
+      needsClassSelect: !!state && (!state.player.heroClass || !state.player.heroRace),
       checkHabit: (id) => mutate((d) => toggleHabit(d, id, today)),
       pickVibe: (id) => mutate((d) => setVibe(d, id, today)),
       createTodo: (title) =>
@@ -155,8 +158,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           equipWearable(d, id, slot)
           return []
         }),
-      pickClass: (id) => mutate((d) => chooseClass(d, id)),
+      pickHero: (race, heroClass) => mutate((d) => chooseHero(d, race, heroClass)),
       respec: (id) => mutate((d) => respecClass(d, id)),
+      respecHeroRace: (id) => mutate((d) => respecRace(d, id)),
       demoResetDay: () =>
         mutate((d) => {
           resetToday(d, today)
@@ -171,7 +175,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             id: crypto.randomUUID(),
             kind: 'info',
             title: 'Fresh adventurer',
-            detail: 'All local progress cleared. Choose a class to begin.',
+            detail: 'All local progress cleared. Choose race and class to begin.',
           },
         ])
       },
@@ -210,7 +214,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }),
       seedDemoArmory: () =>
         mutate((d) => {
-          if (!d.player.heroClass) d.player.heroClass = 'warrior'
+          if (!d.player.heroClass) d.player.heroClass = 'ranger'
+          if (!d.player.heroRace) d.player.heroRace = 'elf'
           d.player.xp = Math.max(d.player.xp, xpForLevel(8))
           d.player.title = titleForLevel(8)
           d.player.dayStreak = Math.max(d.player.dayStreak, 7)

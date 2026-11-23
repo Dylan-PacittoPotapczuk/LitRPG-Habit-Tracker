@@ -9,7 +9,7 @@ import { SettingsPage } from './pages/Settings'
 import { TodayPage } from './pages/Today'
 
 function Shell() {
-  const { ready, needsClassSelect, pickClass } = useStore()
+  const { ready, needsClassSelect, pickHero } = useStore()
   const [tab, setTab] = useState<Tab>('today')
 
   if (!ready) {
@@ -19,7 +19,7 @@ function Shell() {
   return (
     <div className="app-shell">
       <ToastStack />
-      {needsClassSelect ? <ClassSelect onChoose={pickClass} /> : null}
+      {needsClassSelect ? <ClassSelect onChoose={pickHero} /> : null}
       {tab === 'today' ? <TodayPage /> : null}
       {tab === 'hero' ? <HeroPage /> : null}
       {tab === 'chronicle' ? <ChroniclePage /> : null}

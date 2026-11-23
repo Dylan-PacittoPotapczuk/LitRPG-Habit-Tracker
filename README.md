@@ -29,12 +29,12 @@ npm run preview
 
 ## What’s in v1
 
-- **Class select** — Warrior / Mage / Ranger / Rogue on first launch; soft habit XP bias; respec in Settings
+- **Race + class select** — Human / Elf / Dwarf / Orc, then Warrior / Mage / Ranger / Rogue; soft habit XP bias; respec both in Settings
 - **Today** — brand hero, vibe check (5 funny feeling-emojis, once/day), 10 recurring habits, optional todos, XP/HP/streak bars, atonement after a miss
-- **Hero** — old-school layered pixel avatar (idle bob), armory grid (chest / weapon / cape / accessory), badges, live equip preview
+- **Hero** — high-detail ~112px layered pixel avatar (idle bob, race silhouettes), armory grid (chest / weapon / cape / accessory), badges, live equip preview
 - **Loot unlocks** — ~13 wearables via level, streak, or full-clear loot rolls; miss-day scuffs gear until healed
 - **Chronicle** — completion / mood / XP charts + weekly summary (no heatmap)
-- **Settings** — class respec, demo reset/seed, JSON export, factory reset, install notes
+- **Settings** — race + class respec, demo reset/seed, JSON export, factory reset, install notes
 
 ### Default habits
 

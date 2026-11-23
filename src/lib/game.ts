@@ -17,6 +17,7 @@ import {
   type EquippedLoadout,
   type HabitId,
   type HeroClass,
+  type HeroRace,
   type PlayerState,
   type ToastEvent,
   type TodoItem,
@@ -95,6 +96,7 @@ export function createInitialState(): AppState {
       equipped: { chest: 'cloth-tunic' },
       gearDamaged: false,
       heroClass: null,
+      heroRace: null,
       title: titleForLevel(1),
       lastPlayedDate: null,
       createdAt: new Date().toISOString(),
@@ -150,6 +152,7 @@ export function migrateState(raw: unknown): AppState {
   player.equipped = equipped
   player.gearDamaged = Boolean(incoming.player?.gearDamaged)
   player.heroClass = (incoming.player?.heroClass as HeroClass | null | undefined) ?? null
+  player.heroRace = (incoming.player?.heroRace as HeroRace | null | undefined) ?? null
 
   return {
     version: 2,
@@ -528,7 +531,12 @@ export function equipLoot(state: AppState, id: WearableId | null): void {
   equipWearable(state, id)
 }
 
-export function chooseClass(state: AppState, heroClass: HeroClass): ToastEvent[] {
+export function chooseHero(
+  state: AppState,
+  heroRace: HeroRace,
+  heroClass: HeroClass,
+): ToastEvent[] {
+  state.player.heroRace = heroRace
   state.player.heroClass = heroClass
   if (!state.player.loot.includes('cloth-tunic')) {
     state.player.loot.unshift('cloth-tunic')
@@ -536,14 +544,21 @@ export function chooseClass(state: AppState, heroClass: HeroClass): ToastEvent[]
   if (!state.player.equipped.chest) {
     state.player.equipped.chest = 'cloth-tunic'
   }
+  const raceName = heroRace[0].toUpperCase() + heroRace.slice(1)
+  const className = heroClass[0].toUpperCase() + heroClass.slice(1)
   return [
     {
       id: crypto.randomUUID(),
       kind: 'info',
-      title: `Class chosen: ${heroClass[0].toUpperCase()}${heroClass.slice(1)}`,
-      detail: 'Your soft habit XP bias is active. Respec anytime in Settings.',
+      title: `${raceName} ${className} ready`,
+      detail: 'Soft habit XP bias is active. Respec race or class anytime in Settings.',
     },
   ]
+}
+
+/** @deprecated prefer chooseHero */
+export function chooseClass(state: AppState, heroClass: HeroClass): ToastEvent[] {
+  return chooseHero(state, state.player.heroRace ?? 'human', heroClass)
 }
 
 export function respecClass(state: AppState, heroClass: HeroClass): ToastEvent[] {
@@ -552,8 +567,20 @@ export function respecClass(state: AppState, heroClass: HeroClass): ToastEvent[]
     {
       id: crypto.randomUUID(),
       kind: 'info',
-      title: `Respec → ${heroClass[0].toUpperCase()}${heroClass.slice(1)}`,
-      detail: 'XP bias habits updated. Gear stays.',
+      title: `Class respec → ${heroClass[0].toUpperCase()}${heroClass.slice(1)}`,
+      detail: 'XP bias habits updated. Race and gear stay.',
+    },
+  ]
+}
+
+export function respecRace(state: AppState, heroRace: HeroRace): ToastEvent[] {
+  state.player.heroRace = heroRace
+  return [
+    {
+      id: crypto.randomUUID(),
+      kind: 'info',
+      title: `Race respec → ${heroRace[0].toUpperCase()}${heroRace.slice(1)}`,
+      detail: 'Silhouette and skin updated. Class and gear stay.',
     },
   ]
 }
