@@ -489,9 +489,9 @@ a {
 }
 
 .avatar-stage {
-  width: min(360px, 88vw);
-  min-height: 420px;
-  aspect-ratio: 112 / 160;
+  width: min(380px, 90vw);
+  min-height: 460px;
+  aspect-ratio: 128 / 192;
   margin: 0 auto 18px;
   border-radius: 28px;
   position: relative;
@@ -714,9 +714,9 @@ a {
 }
 
 .class-select-preview .pixel-avatar.large {
-  transform: scale(0.55);
+  transform: scale(0.72);
   transform-origin: center center;
-  margin: -40px 0;
+  margin: -28px 0;
 }
 
 .class-card .pixel-avatar {

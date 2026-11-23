@@ -4,9 +4,9 @@ import { raceDef } from '../lib/races'
 import { WEARABLES } from '../lib/wearables'
 import type { EquippedLoadout, HeroClass, HeroRace } from '../lib/types'
 
-/** Dense pixel base — crisp nearest-neighbor upscale in CSS. */
-const W = 112
-const H = 160
+/** Dense pixel base (~128×192) — crisp nearest-neighbor upscale in CSS. */
+const W = 128
+const H = 192
 
 type Layer = 'cape' | 'body' | 'chest' | 'head' | 'accessory' | 'weapon' | 'fx'
 
@@ -138,20 +138,20 @@ function buildSprite(
   const build = race.build
   const height = race.height
 
-  // Layout anchors (human baseline), then race-scaled
-  const cx = 56
-  const headCy = Math.round(28 / height + (height < 0.9 ? 10 : 0))
-  const headRx = Math.round(14 * build * (heroRace === 'elf' ? 0.92 : 1))
-  const headRy = Math.round(16 * (heroRace === 'dwarf' ? 1.05 : heroRace === 'elf' ? 1.08 : 1))
+  // Layout anchors (human baseline), then race-scaled — denser 128×192 grid
+  const cx = 64
+  const headCy = Math.round(34 / height + (height < 0.9 ? 14 : 0))
+  const headRx = Math.round(16 * build * (heroRace === 'elf' ? 0.92 : 1))
+  const headRy = Math.round(18 * (heroRace === 'dwarf' ? 1.05 : heroRace === 'elf' ? 1.1 : 1))
   const neckY = headCy + headRy - 1
-  const torsoTop = neckY + 4
-  const torsoW = Math.round(28 * build)
-  const torsoH = Math.round(42 * height * (heroRace === 'dwarf' ? 0.95 : 1))
+  const torsoTop = neckY + 5
+  const torsoW = Math.round(32 * build)
+  const torsoH = Math.round(50 * height * (heroRace === 'dwarf' ? 0.95 : 1))
   const hipY = torsoTop + torsoH
-  const legH = Math.round(36 * height)
-  const footY = Math.min(H - 4, hipY + legH)
-  const shoulderY = torsoTop + 4
-  const armLen = Math.round(34 * height)
+  const legH = Math.round(44 * height)
+  const footY = Math.min(H - 6, hipY + legH)
+  const shoulderY = torsoTop + 5
+  const armLen = Math.round(40 * height)
 
   const chest = equipped.chest ? WEARABLES[equipped.chest] : null
   const cape = equipped.cape ? WEARABLES[equipped.cape] : null
@@ -347,44 +347,40 @@ function buildSprite(
     buf.rect(cx - 9, headCy - 5, 18, 1, skin.deep, 'head')
   }
 
-  // Eyes
-  const eyeY = headCy - 1
-  const eyeSpread = Math.round(5 + build)
+  // Eyes — denser sockets, sclera, iris, pupil, highlight
+  const eyeY = headCy
+  const eyeSpread = Math.round(6 + build)
   for (const side of [-1, 1] as const) {
     const ex = cx + side * eyeSpread
-    // Socket
-    buf.rect(ex - 3, eyeY - 1, 6, 4, skin.deep, 'head')
-    // White
-    buf.rect(ex - 2, eyeY, 5, 3, '#f4efe6', 'head')
-    // Iris
-    buf.rect(ex - 1, eyeY, 3, 3, race.eye, 'head')
-    buf.put(ex, eyeY + 1, shade(race.eye, -40), 'head')
-    // Specular
-    buf.put(ex - 1, eyeY, '#ffffff', 'head')
-    // Lid
-    buf.rect(ex - 3, eyeY - 1, 6, 1, skin.shade, 'head')
-    // Lash
-    buf.rect(ex - 2, eyeY - 2, 5, 1, hairShade, 'head')
+    buf.rect(ex - 4, eyeY - 2, 8, 6, skin.deep, 'head')
+    buf.rect(ex - 3, eyeY - 1, 7, 5, '#f7f2ea', 'head')
+    buf.rect(ex - 2, eyeY, 5, 4, race.eye, 'head')
+    buf.rect(ex - 1, eyeY + 1, 3, 3, shade(race.eye, -45), 'head')
+    buf.put(ex, eyeY + 2, '#0a0806', 'head')
+    buf.put(ex - 2, eyeY, '#ffffff', 'head')
+    buf.rect(ex - 4, eyeY - 2, 8, 2, skin.shade, 'head')
+    buf.rect(ex - 3, eyeY - 3, 6, 1, hairShade, 'head')
   }
 
-  // Nose
-  buf.put(cx, headCy + 3, skin.shade, 'head')
-  buf.put(cx - 1, headCy + 4, skin.deep, 'head')
-  buf.put(cx + 1, headCy + 4, skin.shade, 'head')
-  buf.put(cx, headCy + 5, skin.mid, 'head')
+  // Nose bridge + tip
+  buf.rect(cx, headCy + 3, 1, 4, skin.shade, 'head')
+  buf.put(cx - 1, headCy + 6, skin.deep, 'head')
+  buf.put(cx + 1, headCy + 6, skin.shade, 'head')
+  buf.rect(cx - 1, headCy + 7, 3, 1, skin.mid, 'head')
 
   // Mouth / tusks
-  const mouthY = headCy + 9
+  const mouthY = headCy + 11
   if (race.traits.tusks) {
-    buf.rect(cx - 4, mouthY, 8, 2, race.lip, 'head')
-    // Tusks
-    buf.rect(cx - 5, mouthY, 2, 5, '#f0e8d8', 'head')
-    buf.rect(cx + 3, mouthY, 2, 5, '#f0e8d8', 'head')
-    buf.put(cx - 5, mouthY + 5, '#d8d0c0', 'head')
-    buf.put(cx + 4, mouthY + 5, '#d8d0c0', 'head')
+    buf.rect(cx - 5, mouthY, 10, 3, race.lip, 'head')
+    buf.rect(cx - 6, mouthY, 2, 6, '#f0e8d8', 'head')
+    buf.rect(cx + 4, mouthY, 2, 6, '#f0e8d8', 'head')
+    buf.put(cx - 6, mouthY + 6, '#d8d0c0', 'head')
+    buf.put(cx + 5, mouthY + 6, '#d8d0c0', 'head')
   } else {
-    buf.rect(cx - 3, mouthY, 6, 2, race.lip, 'head')
-    buf.rect(cx - 2, mouthY, 4, 1, mix(race.lip, '#fff', 0.2), 'head')
+    buf.rect(cx - 4, mouthY, 8, 2, race.lip, 'head')
+    buf.rect(cx - 3, mouthY, 6, 1, mix(race.lip, '#fff', 0.25), 'head')
+    buf.put(cx - 4, mouthY + 1, skin.shade, 'head')
+    buf.put(cx + 3, mouthY + 1, skin.shade, 'head')
   }
 
   // Beard
@@ -518,22 +514,24 @@ function drawHair(
     return
   }
 
-  // Cap of hair — smooth bands, not noisy dither
-  for (let y = -2; y < headRy - 4; y++) {
-    const span = Math.round(Math.sqrt(Math.max(0, 1 - ((y + 2) / (headRy + 2)) ** 2)) * (headRx + 2))
+  // Hair cap sits on the crown only — leave forehead/cheeks readable
+  for (let y = -3; y < Math.round(headRy * 0.35); y++) {
+    const span = Math.round(
+      Math.sqrt(Math.max(0, 1 - ((y + 3) / (headRy * 0.7 + 3)) ** 2)) * (headRx + 3),
+    )
     for (let x = -span; x <= span; x++) {
-      const fringe = y < 2 && Math.abs(x) < span - 1
-      if (!(y < headRy * 0.55 || fringe)) continue
-      const edge = Math.abs(x) > span - 2 || y <= 0
-      const hi = x + y < -2
-      const c = edge ? shadeC : hi ? light : mid
-      buf.put(cx + x, top + y, c, 'head')
+      const edge = Math.abs(x) > span - 2 || y <= -1
+      const hi = x + y < -3
+      buf.put(cx + x, top + y, edge ? shadeC : hi ? light : mid, 'head')
     }
   }
-  // Bangs
-  for (let x = -Math.round(headRx * 0.7); x <= Math.round(headRx * 0.7); x++) {
-    const drop = 2 + (Math.abs(x) % 3 === 0 ? 2 : 1)
-    for (let y = 0; y < drop; y++) buf.put(cx + x, headCy - 6 + y, Math.abs(x) < 2 ? light : mid, 'head')
+  // Soft bangs above the eyes (not a solid helmet)
+  for (let x = -Math.round(headRx * 0.75); x <= Math.round(headRx * 0.75); x++) {
+    if (Math.abs(x) < 3) continue // part in the middle
+    const drop = 3 + (Math.abs(x) % 4 === 0 ? 2 : 0)
+    for (let y = 0; y < drop; y++) {
+      buf.put(cx + x, headCy - 8 + y, y === 0 ? light : mid, 'head')
+    }
   }
 
   if (heroClass === 'rogue') {
@@ -606,8 +604,8 @@ export function PixelAvatar({
   className?: string
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  // Large: ~3× crisp upscale (336×480). Compact nav chip: ~0.45×.
-  const scale = large ? 3 : 0.45
+  // Large: 2.75× crisp upscale (~352×528). Compact nav chip: ~0.4×.
+  const scale = large ? 2.75 : 0.4
   const displayW = Math.round(W * scale)
   const displayH = Math.round(H * scale)
 
