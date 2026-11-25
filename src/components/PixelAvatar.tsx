@@ -2,29 +2,37 @@ import { useEffect, useRef } from 'react'
 import { classDef } from '../lib/classes'
 import { raceDef } from '../lib/races'
 import { WEARABLES } from '../lib/wearables'
-import type { EquippedLoadout, HeroClass, HeroRace } from '../lib/types'
+import type { EquippedLoadout, HeroClass, HeroRace, WearableId } from '../lib/types'
 
-/** Dense pixel base (~128×192) — crisp nearest-neighbor upscale in CSS. */
-const W = 128
-const H = 192
+/**
+ * Classic r/DnD “100 pixel characters” density:
+ * ~32×48 body in a 40×56 canvas, nearest-neighbor upscaled.
+ */
+const W = 40
+const H = 56
 
-type Layer = 'cape' | 'body' | 'chest' | 'head' | 'accessory' | 'weapon' | 'fx'
+type Layer = 'ground' | 'cape' | 'body' | 'chest' | 'head' | 'accessory' | 'weapon' | 'outline'
+
+const Z: Record<Layer, number> = {
+  ground: 0,
+  cape: 1,
+  body: 2,
+  chest: 3,
+  head: 4,
+  accessory: 5,
+  weapon: 6,
+  outline: 7,
+}
+
+const OUTLINE = '#1a1210'
+const GROUND = '#5a4030'
+const GROUND_HI = '#7a5a40'
 
 interface Pix {
   x: number
   y: number
   c: string
   z: number
-}
-
-const Z: Record<Layer, number> = {
-  cape: 0,
-  body: 1,
-  chest: 2,
-  head: 3,
-  accessory: 4,
-  weapon: 5,
-  fx: 6,
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -38,70 +46,75 @@ function shade(hex: string, amt: number): string {
   return `#${t(r).toString(16).padStart(2, '0')}${t(g).toString(16).padStart(2, '0')}${t(b).toString(16).padStart(2, '0')}`
 }
 
-function mix(a: string, b: string, t: number): string {
-  const [ar, ag, ab] = hexToRgb(a)
-  const [br, bg, bb] = hexToRgb(b)
-  const m = (x: number, y: number) => Math.round(x + (y - x) * t)
-  return `#${m(ar, br).toString(16).padStart(2, '0')}${m(ag, bg).toString(16).padStart(2, '0')}${m(ab, bb).toString(16).padStart(2, '0')}`
-}
-
 function damagedTint(hex: string): string {
-  return mix(hex, '#6b2a22', 0.38)
+  if (hex === OUTLINE) return hex
+  const [r, g, b] = hexToRgb(hex)
+  const nr = Math.min(255, Math.round(r * 0.72 + 35))
+  const ng = Math.min(255, Math.round(g * 0.55))
+  const nb = Math.min(255, Math.round(b * 0.55))
+  return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`
 }
 
-class Buffer {
-  pixels: Pix[] = []
+class Buf {
+  map = new Map<string, Pix>()
   put(x: number, y: number, c: string, layer: Layer) {
-    const xi = Math.round(x)
-    const yi = Math.round(y)
-    if (xi < 0 || yi < 0 || xi >= W || yi >= H || !c) return
-    this.pixels.push({ x: xi, y: yi, c, z: Z[layer] })
+    if (x < 0 || y < 0 || x >= W || y >= H || !c) return
+    const key = `${x},${y}`
+    const prev = this.map.get(key)
+    const z = Z[layer]
+    if (prev && prev.z > z) return
+    this.map.set(key, { x, y, c, z })
   }
   rect(x0: number, y0: number, w: number, h: number, c: string, layer: Layer) {
-    for (let y = y0; y < y0 + h; y++) {
-      for (let x = x0; x < x0 + w; x++) this.put(x, y, c, layer)
-    }
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) this.put(x, y, c, layer)
   }
-  /** Soft vertical gradient fill. */
-  vgrad(
-    x0: number,
-    y0: number,
-    w: number,
-    h: number,
-    top: string,
-    bot: string,
-    layer: Layer,
-  ) {
-    for (let y = 0; y < h; y++) {
-      const t = h <= 1 ? 0 : y / (h - 1)
-      const c = mix(top, bot, t)
-      for (let x = 0; x < w; x++) this.put(x0 + x, y0 + y, c, layer)
-    }
-  }
-  /** Ellipse-ish filled disc with edge shade. */
-  disc(
-    cx: number,
-    cy: number,
-    rx: number,
-    ry: number,
-    mid: string,
-    light: string,
-    shadeC: string,
-    layer: Layer,
-  ) {
-    for (let y = -ry; y <= ry; y++) {
-      for (let x = -rx; x <= rx; x++) {
-        const nx = x / rx
-        const ny = y / ry
-        const d = nx * nx + ny * ny
-        if (d > 1) continue
-        let c = mid
-        if (d > 0.72) c = shadeC
-        else if (nx + ny < -0.35) c = light
-        else if (nx + ny > 0.45) c = shadeC
-        this.put(cx + x, cy + y, c, layer)
+  /** Stamp a row-string sprite (`.` = empty). */
+  stamp(x0: number, y0: number, rows: string[], palette: Record<string, string>, layer: Layer) {
+    for (let y = 0; y < rows.length; y++) {
+      const row = rows[y]
+      for (let x = 0; x < row.length; x++) {
+        const ch = row[x]
+        if (ch === '.' || ch === ' ') continue
+        const c = palette[ch]
+        if (c) this.put(x0 + x, y0 + y, c, layer)
       }
     }
+  }
+  /** 1px dark outline around any filled pixels (sheet-style). */
+  outlinePass() {
+    const filled = [...this.map.values()].filter((p) => p.z !== Z.outline && p.z !== Z.ground)
+    const dirs = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ]
+    for (const p of filled) {
+      for (const [dx, dy] of dirs) {
+        const nx = p.x + dx
+        const ny = p.y + dy
+        const key = `${nx},${ny}`
+        if (!this.map.has(key)) this.put(nx, ny, OUTLINE, 'outline')
+      }
+    }
+  }
+  pixels(): Pix[] {
+    return [...this.map.values()]
+  }
+}
+
+/** Race layout offsets inside the 40×56 canvas. */
+function raceLayout(race: HeroRace | null) {
+  // Foot baseline near bottom; dwarf shorter; elf taller/slimmer; orc broader
+  switch (race) {
+    case 'dwarf':
+      return { cx: 20, headY: 14, headW: 8, headH: 7, torsoW: 12, torsoH: 12, legH: 10, armW: 3, build: 1.15 }
+    case 'elf':
+      return { cx: 20, headY: 6, headW: 7, headH: 8, torsoW: 8, torsoH: 14, legH: 16, armW: 2, build: 0.9 }
+    case 'orc':
+      return { cx: 20, headY: 7, headW: 9, headH: 8, torsoW: 12, torsoH: 14, legH: 14, armW: 3, build: 1.12 }
+    default:
+      return { cx: 20, headY: 8, headW: 8, headH: 8, torsoW: 10, torsoH: 13, legH: 14, armW: 3, build: 1 }
   }
 }
 
@@ -111,464 +124,348 @@ function buildSprite(
   equipped: EquippedLoadout,
   damaged: boolean,
 ): Pix[] {
-  const buf = new Buffer()
+  const buf = new Buf()
   const race = raceDef(heroRace) ?? raceDef('human')!
   const cls = classDef(heroClass)
+  const L = raceLayout(heroRace)
+  const skin = race.skin.mid
+  const skinHi = race.skin.light
+  const skinSh = race.skin.shade
+  const hair = heroClass === 'mage' && heroRace !== 'elf' ? '#2a2a4a' : race.hair.mid
+  const hairHi = heroClass === 'mage' && heroRace !== 'elf' ? '#5a5a7a' : race.hair.light
+  const hairSh = race.hair.shade
   const tunic = cls?.palette.tunic ?? '#6b5a4a'
   const accent = cls?.palette.accent ?? '#d4894a'
-  // Prefer race hair; class can nudge mage/rogue hair darker
-  let hairLight = race.hair.light
-  let hairMid = race.hair.mid
-  let hairShade = race.hair.shade
-  if (heroClass === 'mage' && heroRace !== 'elf') {
-    hairLight = '#5a5a7a'
-    hairMid = '#2a2a4a'
-    hairShade = '#12122a'
-  } else if (heroClass === 'rogue') {
-    hairLight = mix(hairLight, '#2a2218', 0.45)
-    hairMid = mix(hairMid, '#1a1210', 0.5)
-    hairShade = '#0a0806'
-  } else if (heroClass === 'ranger' && heroRace === 'human') {
-    hairLight = '#3a5a32'
-    hairMid = '#1e3a28'
-    hairShade = '#0e1e14'
-  }
-
-  const skin = race.skin
-  const build = race.build
-  const height = race.height
-
-  // Layout anchors (human baseline), then race-scaled — denser 128×192 grid
-  const cx = 64
-  const headCy = Math.round(34 / height + (height < 0.9 ? 14 : 0))
-  const headRx = Math.round(16 * build * (heroRace === 'elf' ? 0.92 : 1))
-  const headRy = Math.round(18 * (heroRace === 'dwarf' ? 1.05 : heroRace === 'elf' ? 1.1 : 1))
-  const neckY = headCy + headRy - 1
-  const torsoTop = neckY + 5
-  const torsoW = Math.round(32 * build)
-  const torsoH = Math.round(50 * height * (heroRace === 'dwarf' ? 0.95 : 1))
-  const hipY = torsoTop + torsoH
-  const legH = Math.round(44 * height)
-  const footY = Math.min(H - 6, hipY + legH)
-  const shoulderY = torsoTop + 5
-  const armLen = Math.round(40 * height)
+  const pant = shade(tunic, -40)
+  const boot = '#2a2218'
 
   const chest = equipped.chest ? WEARABLES[equipped.chest] : null
   const cape = equipped.cape ? WEARABLES[equipped.cape] : null
   const weapon = equipped.weapon ? WEARABLES[equipped.weapon] : null
   const accessory = equipped.accessory ? WEARABLES[equipped.accessory] : null
 
-  // ——— CAPE (behind) ———
+  const hx = L.cx - Math.floor(L.headW / 2)
+  const hy = L.headY
+  const tx = L.cx - Math.floor(L.torsoW / 2)
+  const ty = hy + L.headH + 1
+  const hipY = ty + L.torsoH
+  const footY = hipY + L.legH
+  const legW = Math.max(3, Math.round(L.torsoW / 2) - 1)
+  const leftLeg = L.cx - legW - 1
+  const rightLeg = L.cx + 1
+
+  // Ground disk (sheet-style)
+  buf.rect(L.cx - 7, footY + 1, 14, 2, GROUND, 'ground')
+  buf.rect(L.cx - 5, footY + 3, 10, 1, GROUND_HI, 'ground')
+
+  // ——— CAPE ———
   if (cape) {
     const p = cape.colors.primary
     const s = cape.colors.secondary
-    const h = cape.colors.highlight ?? shade(p, 40)
-    // Flowing panels
-    for (let side of [-1, 1] as const) {
-      const ox = cx + side * Math.round(torsoW / 2 + 2)
-      for (let i = 0; i < 48; i++) {
-        const wave = Math.sin(i * 0.22) * 2.2 * side
-        const x0 = Math.round(ox + wave - (side < 0 ? 6 : 0))
-        const w = 7 + Math.floor((i / 48) * 4)
-        buf.rect(x0, shoulderY + i, w, 1, i % 5 === 0 ? h : p, 'cape')
-        buf.put(x0 + (side < 0 ? 0 : w - 1), shoulderY + i, s, 'cape')
-      }
-    }
+    const h = cape.colors.highlight ?? shade(p, 30)
+    // Sheet-style panels behind shoulders
+    buf.rect(tx - 3, ty + 1, 3, L.torsoH + 6, p, 'cape')
+    buf.rect(tx + L.torsoW, ty + 1, 3, L.torsoH + 6, p, 'cape')
+    buf.rect(tx - 4, ty + 4, 1, L.torsoH + 2, s, 'cape')
+    buf.rect(tx + L.torsoW + 3, ty + 4, 1, L.torsoH + 2, s, 'cape')
+    buf.put(tx - 2, ty + 2, h, 'cape')
+    buf.put(tx + L.torsoW + 1, ty + 2, h, 'cape')
     // Collar
-    buf.vgrad(cx - 12, shoulderY - 2, 24, 5, h, s, 'cape')
+    buf.rect(tx - 1, ty, L.torsoW + 2, 2, p, 'cape')
   }
 
   // ——— LEGS ———
-  const legGap = Math.round(4 * build)
-  const legW = Math.round(9 * build)
-  const leftLegX = cx - legGap - legW
-  const rightLegX = cx + legGap
-  const pant = shade(tunic, -30)
-  const pantShade = shade(tunic, -55)
-  buf.vgrad(leftLegX, hipY - 2, legW, footY - hipY, pant, pantShade, 'body')
-  buf.vgrad(rightLegX, hipY - 2, legW, footY - hipY, pant, pantShade, 'body')
-  // Knee crease
-  buf.rect(leftLegX + 1, hipY + Math.round(legH * 0.45), legW - 2, 2, pantShade, 'body')
-  buf.rect(rightLegX + 1, hipY + Math.round(legH * 0.45), legW - 2, 2, pantShade, 'body')
+  buf.rect(leftLeg, hipY - 1, legW, L.legH, pant, 'body')
+  buf.rect(rightLeg, hipY - 1, legW, L.legH, pant, 'body')
+  buf.rect(leftLeg, hipY - 1, 1, L.legH, shade(pant, -25), 'body')
+  buf.rect(rightLeg + legW - 1, hipY - 1, 1, L.legH, shade(pant, -25), 'body')
 
-  // Boots / verdant boots
-  const bootTop = footY - 12
+  // Boots / verdant
+  const bootH = 4
   if (accessory?.id === 'verdant-boots') {
     const bp = accessory.colors.primary
-    const bh = accessory.colors.highlight ?? shade(bp, 35)
-    const bs = accessory.colors.secondary
-    for (const lx of [leftLegX - 1, rightLegX - 1]) {
-      buf.vgrad(lx, bootTop, legW + 2, 12, bh, bs, 'accessory')
-      buf.rect(lx, footY - 3, legW + 3, 3, bs, 'accessory')
-      buf.put(lx + 2, bootTop + 2, bh, 'accessory')
-      // Lace
-      buf.put(lx + Math.floor(legW / 2), bootTop + 4, '#e8dcc8', 'accessory')
-      buf.put(lx + Math.floor(legW / 2), bootTop + 7, '#e8dcc8', 'accessory')
-    }
+    const bh = accessory.colors.highlight ?? shade(bp, 25)
+    buf.rect(leftLeg - 1, footY - bootH, legW + 1, bootH, bp, 'accessory')
+    buf.rect(rightLeg, footY - bootH, legW + 1, bootH, bp, 'accessory')
+    buf.put(leftLeg, footY - bootH + 1, bh, 'accessory')
+    buf.put(rightLeg + 1, footY - bootH + 1, bh, 'accessory')
   } else {
-    const boot = '#2a2218'
-    const bootHi = '#4a3a28'
-    for (const lx of [leftLegX - 1, rightLegX - 1]) {
-      buf.vgrad(lx, bootTop, legW + 2, 12, bootHi, boot, 'body')
-      buf.rect(lx, footY - 3, legW + 4, 3, '#1a1410', 'body')
-    }
+    buf.rect(leftLeg - 1, footY - bootH, legW + 1, bootH, boot, 'body')
+    buf.rect(rightLeg, footY - bootH, legW + 1, bootH, boot, 'body')
+    buf.rect(leftLeg - 1, footY - 1, legW + 2, 1, shade(boot, -20), 'body')
+    buf.rect(rightLeg, footY - 1, legW + 2, 1, shade(boot, -20), 'body')
   }
 
-  // ——— TORSO (undershirt) ———
-  const tx0 = cx - Math.floor(torsoW / 2)
-  buf.vgrad(tx0, torsoTop, torsoW, torsoH, shade(tunic, 25), shade(tunic, -35), 'body')
-  // Side contour
-  for (let y = 0; y < torsoH; y++) {
-    buf.put(tx0, torsoTop + y, shade(tunic, -50), 'body')
-    buf.put(tx0 + torsoW - 1, torsoTop + y, shade(tunic, -40), 'body')
-  }
+  // ——— TORSO undershirt ———
+  buf.rect(tx, ty, L.torsoW, L.torsoH, tunic, 'body')
+  buf.rect(tx, ty, 1, L.torsoH, shade(tunic, -35), 'body')
+  buf.rect(tx + L.torsoW - 1, ty, 1, L.torsoH, shade(tunic, -20), 'body')
+  buf.put(tx + 2, ty + 2, shade(tunic, 25), 'body')
 
   // ——— CHEST ARMOR ———
-  if (chest) {
-    const p = chest.colors.primary
-    const s = chest.colors.secondary
-    const h = chest.colors.highlight ?? shade(p, 45)
-    const aw = torsoW + (chest.id === 'ember-plate' || chest.id === 'iron-mail' ? 4 : 2)
-    const ax0 = cx - Math.floor(aw / 2)
-    const ah = torsoH - 4
-
-    if (chest.id === 'cloth-tunic') {
-      buf.vgrad(ax0, torsoTop, aw, ah, h, s, 'chest')
-      // Neckline
-      buf.disc(cx, torsoTop + 2, 6, 4, skin.mid, skin.light, skin.shade, 'body')
-      // Stitch rows
-      for (let y = torsoTop + 10; y < torsoTop + ah - 6; y += 6) {
-        buf.rect(ax0 + 4, y, aw - 8, 1, mix(p, '#000', 0.2), 'chest')
-      }
-    } else if (chest.id === 'leather-vest') {
-      buf.vgrad(ax0, torsoTop, aw, ah, h, s, 'chest')
-      // Overlap panels
-      buf.rect(cx - 2, torsoTop + 4, 4, ah - 10, s, 'chest')
-      for (let i = 0; i < 5; i++) {
-        buf.put(cx - 1, torsoTop + 8 + i * 6, h, 'chest')
-        buf.put(cx + 1, torsoTop + 8 + i * 6, '#c8a060', 'chest')
-      }
-      // Shoulder straps
-      buf.rect(ax0, torsoTop, 5, 8, s, 'chest')
-      buf.rect(ax0 + aw - 5, torsoTop, 5, 8, s, 'chest')
-    } else if (chest.id === 'iron-mail') {
-      buf.vgrad(ax0, torsoTop, aw, ah, h, s, 'chest')
-      // Mail rings grid
-      for (let y = torsoTop + 4; y < torsoTop + ah - 8; y += 3) {
-        for (let x = ax0 + 3; x < ax0 + aw - 3; x += 3) {
-          buf.put(x, y, mix(h, '#fff', 0.15), 'chest')
-          buf.put(x + 1, y + 1, s, 'chest')
-        }
-      }
-      // Pauldrons
-      buf.disc(ax0 + 2, shoulderY + 4, 7, 6, h, shade(h, 30), s, 'chest')
-      buf.disc(ax0 + aw - 2, shoulderY + 4, 7, 6, h, shade(h, 30), s, 'chest')
-      // Chest ridge
-      buf.rect(cx - 1, torsoTop + 8, 2, ah - 16, h, 'chest')
-    } else {
-      // ember-plate
-      buf.vgrad(ax0, torsoTop, aw, ah, h, s, 'chest')
-      for (let y = torsoTop + 4; y < torsoTop + ah - 8; y += 4) {
-        buf.rect(ax0 + 3, y, aw - 6, 2, mix(p, h, 0.5), 'chest')
-        buf.rect(ax0 + 3, y + 2, aw - 6, 1, s, 'chest')
-      }
-      buf.disc(ax0 + 3, shoulderY + 5, 8, 7, p, h, s, 'chest')
-      buf.disc(ax0 + aw - 3, shoulderY + 5, 8, 7, p, h, s, 'chest')
-      // Ember glow core
-      buf.disc(cx, torsoTop + 16, 5, 6, h, '#ffe0a0', p, 'chest')
-    }
-
-    // Belt
-    buf.rect(ax0 - 1, hipY - 6, aw + 2, 5, s, 'chest')
-    buf.rect(cx - 4, hipY - 7, 8, 7, h, 'chest')
-    buf.rect(cx - 2, hipY - 5, 4, 3, accent, 'chest')
-  }
+  if (chest) drawChest(buf, chest.id, tx, ty, L.torsoW, L.torsoH, chest.colors, accent)
 
   // ——— ARMS ———
-  const armW = Math.round(8 * build)
-  const leftArmX = tx0 - armW - 1
-  const rightArmX = tx0 + torsoW + 1
-  buf.vgrad(leftArmX, shoulderY, armW, armLen, skin.light, skin.shade, 'body')
-  buf.vgrad(rightArmX, shoulderY, armW, armLen, skin.light, skin.shade, 'body')
-  // Elbow dimple
-  buf.rect(leftArmX + 1, shoulderY + Math.round(armLen * 0.45), armW - 2, 2, skin.deep, 'body')
-  buf.rect(rightArmX + 1, shoulderY + Math.round(armLen * 0.45), armW - 2, 2, skin.deep, 'body')
+  const armX0 = tx - L.armW - 1
+  const armX1 = tx + L.torsoW + 1
+  const armLen = Math.max(8, L.torsoH - 1)
+  buf.rect(armX0, ty + 1, L.armW, armLen, skin, 'body')
+  buf.rect(armX1, ty + 1, L.armW, armLen, skin, 'body')
+  buf.put(armX0, ty + 1, skinHi, 'body')
+  buf.put(armX1 + L.armW - 1, ty + 1, skinSh, 'body')
   // Hands
-  buf.disc(leftArmX + armW / 2, shoulderY + armLen + 2, 5, 4, skin.mid, skin.light, skin.shade, 'body')
-  buf.disc(rightArmX + armW / 2, shoulderY + armLen + 2, 5, 4, skin.mid, skin.light, skin.shade, 'body')
+  buf.rect(armX0, ty + 1 + armLen, L.armW + 1, 2, skinHi, 'body')
+  buf.rect(armX1 - 1, ty + 1 + armLen, L.armW + 1, 2, skin, 'body')
 
-  // Bracers / ring
   if (accessory?.id === 'rune-bracers' || accessory?.id === 'copper-ring') {
     const ap = accessory.colors.primary
-    const ah = accessory.colors.highlight ?? shade(ap, 40)
-    const as_ = accessory.colors.secondary
-    const by = shoulderY + Math.round(armLen * 0.62)
-    for (const ax of [leftArmX - 1, rightArmX - 1]) {
-      buf.vgrad(ax, by, armW + 2, 8, ah, as_, 'accessory')
-      if (accessory.id === 'rune-bracers') {
-        buf.rect(ax + 2, by + 2, armW - 2, 1, ah, 'accessory')
-        buf.put(ax + Math.floor(armW / 2), by + 4, '#c8e0ff', 'accessory')
-      }
-    }
+    const ah = accessory.colors.highlight ?? shade(ap, 30)
+    const by = ty + Math.floor(armLen * 0.65)
+    buf.rect(armX0 - 1, by, L.armW + 1, 3, ap, 'accessory')
+    buf.rect(armX1, by, L.armW + 1, 3, ap, 'accessory')
+    buf.put(armX0, by, ah, 'accessory')
+    buf.put(armX1 + 1, by, ah, 'accessory')
   }
 
   // ——— NECK ———
-  buf.vgrad(cx - 4, neckY, 8, 6, skin.light, skin.shade, 'body')
+  buf.rect(L.cx - 1, hy + L.headH, 3, 2, skin, 'body')
 
   // ——— HEAD ———
-  buf.disc(cx, headCy, headRx, headRy, skin.mid, skin.light, skin.shade, 'head')
-  // Cheek warmth
-  buf.disc(cx - Math.round(headRx * 0.45), headCy + 4, 3, 2, mix(skin.mid, '#e07060', 0.25), skin.light, skin.shade, 'head')
-  buf.disc(cx + Math.round(headRx * 0.45), headCy + 4, 3, 2, mix(skin.mid, '#e07060', 0.25), skin.light, skin.shade, 'head')
+  buf.rect(hx, hy, L.headW, L.headH, skin, 'head')
+  buf.rect(hx, hy, 1, L.headH, skinSh, 'head')
+  buf.rect(hx + 1, hy, L.headW - 2, 1, skinHi, 'head')
 
   // Ears
   if (race.traits.ears === 'pointed') {
-    // Elven / orc pointed
-    for (const side of [-1, 1] as const) {
-      const ex = cx + side * (headRx + 1)
-      for (let i = 0; i < (heroRace === 'elf' ? 14 : 10); i++) {
-        const taper = Math.max(1, 4 - Math.floor(i / 3))
-        buf.rect(ex + (side < 0 ? -taper : 0), headCy - 2 - i, taper, 1, i < 3 ? skin.light : skin.mid, 'head')
-        buf.put(ex + (side < 0 ? -taper : taper - 1), headCy - 2 - i, skin.shade, 'head')
+    const earH = heroRace === 'elf' ? 5 : 3
+    for (let i = 0; i < earH; i++) {
+      buf.put(hx - 1, hy + 2 - i, skin, 'head')
+      buf.put(hx + L.headW, hy + 2 - i, skin, 'head')
+      if (i > 0) {
+        buf.put(hx - 1, hy + 2 - i, skinHi, 'head')
       }
     }
+    // tip
+    buf.put(hx - 1, hy + 2 - earH, skinHi, 'head')
+    buf.put(hx + L.headW, hy + 2 - earH, skin, 'head')
   } else if (race.traits.ears === 'round') {
-    buf.disc(cx - headRx - 1, headCy + 1, 4, 5, skin.mid, skin.light, skin.shade, 'head')
-    buf.disc(cx + headRx + 1, headCy + 1, 4, 5, skin.mid, skin.light, skin.shade, 'head')
-  } else {
-    // dwarf small
-    buf.disc(cx - headRx, headCy + 2, 3, 4, skin.mid, skin.light, skin.shade, 'head')
-    buf.disc(cx + headRx, headCy + 2, 3, 4, skin.mid, skin.light, skin.shade, 'head')
+    buf.put(hx - 1, hy + 3, skin, 'head')
+    buf.put(hx + L.headW, hy + 3, skin, 'head')
   }
 
-  // Brow ridge
-  if (race.traits.brow === 'heavy') {
-    buf.rect(cx - 10, headCy - 4, 20, 3, skin.shade, 'head')
-    buf.rect(cx - 9, headCy - 5, 18, 1, skin.deep, 'head')
-  }
+  // Eyes
+  const eyeY = hy + Math.floor(L.headH / 2) - 1
+  buf.put(hx + 2, eyeY, '#f4efe6', 'head')
+  buf.put(hx + L.headW - 3, eyeY, '#f4efe6', 'head')
+  buf.put(hx + 2, eyeY, race.eye, 'head')
+  buf.put(hx + L.headW - 3, eyeY, race.eye, 'head')
+  buf.put(hx + 2, eyeY - 1, hairSh, 'head')
+  buf.put(hx + L.headW - 3, eyeY - 1, hairSh, 'head')
 
-  // Eyes — denser sockets, sclera, iris, pupil, highlight
-  const eyeY = headCy
-  const eyeSpread = Math.round(6 + build)
-  for (const side of [-1, 1] as const) {
-    const ex = cx + side * eyeSpread
-    buf.rect(ex - 4, eyeY - 2, 8, 6, skin.deep, 'head')
-    buf.rect(ex - 3, eyeY - 1, 7, 5, '#f7f2ea', 'head')
-    buf.rect(ex - 2, eyeY, 5, 4, race.eye, 'head')
-    buf.rect(ex - 1, eyeY + 1, 3, 3, shade(race.eye, -45), 'head')
-    buf.put(ex, eyeY + 2, '#0a0806', 'head')
-    buf.put(ex - 2, eyeY, '#ffffff', 'head')
-    buf.rect(ex - 4, eyeY - 2, 8, 2, skin.shade, 'head')
-    buf.rect(ex - 3, eyeY - 3, 6, 1, hairShade, 'head')
-  }
-
-  // Nose bridge + tip
-  buf.rect(cx, headCy + 3, 1, 4, skin.shade, 'head')
-  buf.put(cx - 1, headCy + 6, skin.deep, 'head')
-  buf.put(cx + 1, headCy + 6, skin.shade, 'head')
-  buf.rect(cx - 1, headCy + 7, 3, 1, skin.mid, 'head')
-
-  // Mouth / tusks
-  const mouthY = headCy + 11
+  // Nose / mouth
+  buf.put(L.cx, eyeY + 2, skinSh, 'head')
+  const mouthY = hy + L.headH - 2
   if (race.traits.tusks) {
-    buf.rect(cx - 5, mouthY, 10, 3, race.lip, 'head')
-    buf.rect(cx - 6, mouthY, 2, 6, '#f0e8d8', 'head')
-    buf.rect(cx + 4, mouthY, 2, 6, '#f0e8d8', 'head')
-    buf.put(cx - 6, mouthY + 6, '#d8d0c0', 'head')
-    buf.put(cx + 5, mouthY + 6, '#d8d0c0', 'head')
+    buf.put(L.cx - 1, mouthY, race.lip, 'head')
+    buf.put(L.cx + 1, mouthY, race.lip, 'head')
+    buf.put(L.cx - 2, mouthY + 1, '#f0e8d8', 'head')
+    buf.put(L.cx + 2, mouthY + 1, '#f0e8d8', 'head')
   } else {
-    buf.rect(cx - 4, mouthY, 8, 2, race.lip, 'head')
-    buf.rect(cx - 3, mouthY, 6, 1, mix(race.lip, '#fff', 0.25), 'head')
-    buf.put(cx - 4, mouthY + 1, skin.shade, 'head')
-    buf.put(cx + 3, mouthY + 1, skin.shade, 'head')
+    buf.put(L.cx - 1, mouthY, race.lip, 'head')
+    buf.put(L.cx, mouthY, race.lip, 'head')
+  }
+
+  // Brow
+  if (race.traits.brow === 'heavy') {
+    buf.rect(hx + 1, eyeY - 1, L.headW - 2, 1, skinSh, 'head')
   }
 
   // Beard
   if (race.traits.beard === 'full') {
-    for (let y = 0; y < 18; y++) {
-      const w = 10 + Math.floor(y * 0.55) - Math.floor(Math.abs(y - 10) * 0.2)
-      buf.rect(cx - Math.floor(w / 2), mouthY + 1 + y, w, 1, y % 3 === 0 ? hairLight : hairMid, 'head')
-      buf.put(cx - Math.floor(w / 2), mouthY + 1 + y, hairShade, 'head')
-      buf.put(cx + Math.floor(w / 2), mouthY + 1 + y, hairShade, 'head')
+    for (let i = 0; i < 8; i++) {
+      const w = 4 + Math.min(4, Math.floor(i / 2))
+      buf.rect(L.cx - Math.floor(w / 2), mouthY + i, w, 1, i % 2 ? hairHi : hair, 'head')
     }
   } else if (race.traits.beard === 'stubble' && heroClass === 'warrior') {
-    for (let y = 0; y < 5; y++) {
-      for (let x = -6; x <= 6; x++) {
-        if ((x + y) % 2 === 0) buf.put(cx + x, mouthY + 2 + y, hairMid, 'head')
-      }
-    }
+    buf.put(L.cx - 2, mouthY + 1, hair, 'head')
+    buf.put(L.cx + 1, mouthY + 1, hair, 'head')
+    buf.put(L.cx - 1, mouthY + 2, hairSh, 'head')
   }
 
   // Hair / class headgear
-  drawHair(buf, cx, headCy, headRx, headRy, hairLight, hairMid, hairShade, heroRace, heroClass, tunic, accent)
+  drawHair(buf, hx, hy, L.headW, L.headH, hair, hairHi, hairSh, heroRace, heroClass, tunic, accent)
 
   // Crown
   if (accessory?.id === 'crown-of-dawn') {
     const cp = accessory.colors.primary
     const ch = accessory.colors.highlight ?? '#fff0a8'
-    const top = headCy - headRy - 2
-    buf.rect(cx - 12, top, 24, 4, cp, 'accessory')
-    buf.rect(cx - 12, top - 1, 24, 1, ch, 'accessory')
-    for (const px of [-10, -4, 0, 4, 10]) {
-      buf.rect(cx + px - 1, top - 6, 3, 6, cp, 'accessory')
-      buf.put(cx + px, top - 7, ch, 'accessory')
-    }
-    buf.put(cx, top - 8, '#fff8d0', 'fx')
+    buf.rect(hx - 1, hy - 2, L.headW + 2, 2, cp, 'accessory')
+    buf.put(hx, hy - 3, ch, 'accessory')
+    buf.put(L.cx, hy - 4, ch, 'accessory')
+    buf.put(hx + L.headW - 1, hy - 3, ch, 'accessory')
   }
 
   // ——— WEAPON ———
-  if (weapon) {
-    const wp = weapon.colors.primary
-    const ws = weapon.colors.secondary
-    const wh = weapon.colors.highlight ?? shade(wp, 50)
-    const hx = rightArmX + armW + 2
-    const hy = shoulderY - 4
+  if (weapon) drawWeapon(buf, weapon.id, armX1 + L.armW, ty, weapon.colors)
 
-    if (weapon.id === 'lantern-staff') {
-      buf.vgrad(hx + 2, hy, 3, 70, ws, shade(ws, -40), 'weapon')
-      // Lantern box
-      buf.rect(hx - 2, hy - 2, 11, 12, ws, 'weapon')
-      buf.rect(hx, hy, 7, 8, wh, 'weapon')
-      buf.disc(hx + 3, hy + 4, 3, 3, '#ffe6a0', '#fff8d0', '#f0b06a', 'fx')
-      // Soft glow ring
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2
-        buf.put(
-          hx + 3 + Math.round(Math.cos(a) * 6),
-          hy + 4 + Math.round(Math.sin(a) * 6),
-          '#f0c878',
-          'fx',
-        )
-      }
-    } else if (weapon.id === 'hunter-bow') {
-      for (let i = 0; i < 36; i++) {
-        const t = i / 35
-        const x = hx + Math.round(Math.sin(t * Math.PI) * 8)
-        const y = hy + 4 + i
-        buf.put(x, y, wp, 'weapon')
-        buf.put(x + 1, y, ws, 'weapon')
-      }
-      // String
-      for (let i = 0; i < 36; i++) buf.put(hx, hy + 4 + i, '#d8d0c0', 'weapon')
-      // Grip
-      buf.rect(hx - 1, hy + 18, 4, 6, wh, 'weapon')
-    } else {
-      // Blade
-      buf.vgrad(hx + 2, hy, 4, 28, wh, wp, 'weapon')
-      buf.rect(hx + 1, hy + 2, 1, 24, mix(wh, '#fff', 0.3), 'weapon')
-      buf.rect(hx + 5, hy + 2, 1, 24, shade(wp, -30), 'weapon')
-      // Tip
-      for (let i = 0; i < 6; i++) {
-        buf.rect(hx + 2 + Math.floor(i / 3), hy - 1 - i, 4 - Math.floor(i / 2), 1, wh, 'weapon')
-      }
-      // Guard
-      buf.rect(hx - 2, hy + 28, 12, 3, ws, 'weapon')
-      buf.rect(hx - 1, hy + 27, 10, 1, wh, 'weapon')
-      // Grip
-      buf.vgrad(hx + 2, hy + 31, 4, 12, ws, shade(ws, -40), 'weapon')
-      // Pommel
-      buf.disc(hx + 4, hy + 44, 3, 3, wh, shade(wh, 20), ws, 'weapon')
+  buf.outlinePass()
+
+  const pixels = buf.pixels()
+  if (!damaged) return pixels
+  return pixels.map((p) => ({ ...p, c: damagedTint(p.c) }))
+}
+
+function drawChest(
+  buf: Buf,
+  id: WearableId,
+  tx: number,
+  ty: number,
+  tw: number,
+  th: number,
+  colors: { primary: string; secondary: string; highlight?: string },
+  accent: string,
+) {
+  const p = colors.primary
+  const s = colors.secondary
+  const h = colors.highlight ?? shade(p, 35)
+
+  if (id === 'cloth-tunic') {
+    buf.rect(tx, ty, tw, th - 1, p, 'chest')
+    buf.rect(tx + 1, ty + 1, tw - 2, 1, h, 'chest')
+    // neckline
+    buf.rect(tx + Math.floor(tw / 2) - 1, ty, 3, 2, s, 'chest')
+  } else if (id === 'leather-vest') {
+    buf.rect(tx, ty, tw, th - 1, p, 'chest')
+    buf.rect(tx + Math.floor(tw / 2) - 1, ty + 2, 2, th - 5, s, 'chest')
+    for (let i = 0; i < 3; i++) buf.put(tx + Math.floor(tw / 2), ty + 3 + i * 3, h, 'chest')
+    buf.rect(tx, ty, 2, 3, s, 'chest')
+    buf.rect(tx + tw - 2, ty, 2, 3, s, 'chest')
+  } else if (id === 'iron-mail') {
+    buf.rect(tx - 1, ty, tw + 2, th - 1, p, 'chest')
+    // mail dots
+    for (let y = ty + 2; y < ty + th - 3; y += 2) {
+      for (let x = tx + 1; x < tx + tw - 1; x += 2) buf.put(x, y, h, 'chest')
     }
+    // pauldrons
+    buf.rect(tx - 2, ty, 3, 4, s, 'chest')
+    buf.rect(tx + tw - 1, ty, 3, 4, s, 'chest')
+    buf.put(tx - 1, ty, h, 'chest')
+    buf.put(tx + tw, ty, h, 'chest')
+  } else if (id === 'ember-plate') {
+    buf.rect(tx - 1, ty, tw + 2, th - 1, p, 'chest')
+    for (let y = ty + 2; y < ty + th - 3; y += 3) {
+      buf.rect(tx + 1, y, tw - 2, 1, h, 'chest')
+      buf.rect(tx + 1, y + 1, tw - 2, 1, s, 'chest')
+    }
+    buf.rect(tx - 2, ty, 4, 5, s, 'chest')
+    buf.rect(tx + tw - 2, ty, 4, 5, s, 'chest')
+    buf.put(tx + Math.floor(tw / 2), ty + 4, h, 'chest')
+    buf.put(tx + Math.floor(tw / 2), ty + 5, '#ffe0a0', 'chest')
   }
 
-  // Soft ground shadow
-  for (let x = -18; x <= 18; x++) {
-    const a = 1 - Math.abs(x) / 18
-    if (a < 0.15) continue
-    buf.rect(cx + x, footY + 1, 1, 2, mix('#000000', '#0a1511', 0.4), 'body')
-  }
-
-  if (!damaged) return buf.pixels
-  return buf.pixels.map((p) => ({ ...p, c: damagedTint(p.c) }))
+  // Belt
+  buf.rect(tx - 1, ty + th - 3, tw + 2, 2, s, 'chest')
+  buf.rect(tx + Math.floor(tw / 2) - 1, ty + th - 4, 3, 3, h, 'chest')
+  buf.put(tx + Math.floor(tw / 2), ty + th - 3, accent, 'chest')
 }
 
 function drawHair(
-  buf: Buffer,
-  cx: number,
-  headCy: number,
-  headRx: number,
-  headRy: number,
-  light: string,
-  mid: string,
-  shadeC: string,
+  buf: Buf,
+  hx: number,
+  hy: number,
+  hw: number,
+  _hh: number,
+  hair: string,
+  hairHi: string,
+  hairSh: string,
   race: HeroRace | null,
   heroClass: HeroClass | null,
   tunic: string,
   accent: string,
 ) {
-  const top = headCy - headRy
-
   if (heroClass === 'mage') {
-    // Pointed hood / hat
-    for (let i = 0; i < 28; i++) {
-      const t = i / 27
-      const w = Math.max(2, Math.round(22 * (1 - t * 0.85)))
-      buf.rect(cx - Math.floor(w / 2), top - 6 - i, w, 1, mix(tunic, accent, t * 0.35), 'head')
-      buf.put(cx - Math.floor(w / 2), top - 6 - i, shade(tunic, -40), 'head')
-      buf.put(cx + Math.floor(w / 2), top - 6 - i, shade(tunic, -20), 'head')
+    // Pointed hat
+    for (let i = 0; i < 10; i++) {
+      const w = Math.max(2, hw + 2 - Math.floor(i * 0.7))
+      buf.rect(hx + Math.floor((hw - w) / 2), hy - 2 - i, w, 1, i > 6 ? accent : tunic, 'head')
     }
-    buf.put(cx, top - 34, accent, 'fx')
-    // Brim
-    buf.rect(cx - 16, top - 4, 32, 4, shade(tunic, -25), 'head')
-    buf.rect(cx - 14, top - 3, 28, 2, mix(tunic, accent, 0.3), 'head')
+    buf.rect(hx - 2, hy - 1, hw + 4, 2, shade(tunic, -30), 'head')
+    buf.put(hx + Math.floor(hw / 2), hy - 12, accent, 'head')
     return
   }
 
-  // Hair cap sits on the crown only — leave forehead/cheeks readable
-  for (let y = -3; y < Math.round(headRy * 0.35); y++) {
-    const span = Math.round(
-      Math.sqrt(Math.max(0, 1 - ((y + 3) / (headRy * 0.7 + 3)) ** 2)) * (headRx + 3),
-    )
-    for (let x = -span; x <= span; x++) {
-      const edge = Math.abs(x) > span - 2 || y <= -1
-      const hi = x + y < -3
-      buf.put(cx + x, top + y, edge ? shadeC : hi ? light : mid, 'head')
-    }
-  }
-  // Soft bangs above the eyes (not a solid helmet)
-  for (let x = -Math.round(headRx * 0.75); x <= Math.round(headRx * 0.75); x++) {
-    if (Math.abs(x) < 3) continue // part in the middle
-    const drop = 3 + (Math.abs(x) % 4 === 0 ? 2 : 0)
-    for (let y = 0; y < drop; y++) {
-      buf.put(cx + x, headCy - 8 + y, y === 0 ? light : mid, 'head')
-    }
-  }
+  // Crown hair
+  buf.rect(hx, hy - 1, hw, 3, hair, 'head')
+  buf.rect(hx + 1, hy - 2, hw - 2, 1, hairHi, 'head')
+  buf.rect(hx, hy - 1, 1, 3, hairSh, 'head')
+
+  // Sideburns / fringe
+  buf.rect(hx, hy + 1, 1, 3, hair, 'head')
+  buf.rect(hx + hw - 1, hy + 1, 1, 3, hair, 'head')
 
   if (heroClass === 'rogue') {
-    // Hood shadow / mask band
-    buf.rect(cx - headRx + 1, headCy - 2, headRx * 2 - 2, 5, '#1a1218', 'head')
-    buf.rect(cx - headRx + 2, headCy - 1, headRx * 2 - 4, 3, '#2a1a28', 'head')
-    // Eye slits
-    buf.rect(cx - 8, headCy - 1, 5, 3, '#0a0806', 'head')
-    buf.rect(cx + 3, headCy - 1, 5, 3, '#0a0806', 'head')
+    // Hood + eye mask
+    buf.rect(hx - 1, hy - 1, hw + 2, 4, hairSh, 'head')
+    buf.rect(hx, hy + 2, hw, 3, '#1a1218', 'head')
+    buf.put(hx + 2, hy + 3, '#0a0806', 'head')
+    buf.put(hx + hw - 3, hy + 3, '#0a0806', 'head')
   }
 
   if (heroClass === 'ranger') {
-    // Side braids / longer locks
-    for (const side of [-1, 1] as const) {
-      for (let i = 0; i < 16; i++) {
-        buf.put(cx + side * (headRx - 1) + side * Math.floor(i / 8), headCy + i, i % 2 ? light : mid, 'head')
-      }
+    // Longer side locks
+    for (let i = 0; i < 6; i++) {
+      buf.put(hx, hy + 3 + i, hair, 'head')
+      buf.put(hx + hw - 1, hy + 3 + i, hairHi, 'head')
     }
   }
 
   if (heroClass === 'warrior') {
-    // Short cropped sides
-    buf.rect(cx - headRx - 1, headCy - 2, 3, 8, shadeC, 'head')
-    buf.rect(cx + headRx - 2, headCy - 2, 3, 8, shadeC, 'head')
+    // Short crop
+    buf.rect(hx + 1, hy - 1, hw - 2, 2, hair, 'head')
   }
 
   if (race === 'elf') {
-    // Long flowing locks — solid strands with a highlight edge
-    for (const side of [-1, 1] as const) {
-      for (let i = 0; i < 30; i++) {
-        const wave = Math.round(Math.sin(i * 0.28) * 1.2)
-        const x = cx + side * (headRx + 1) + wave
-        buf.rect(x, headCy + 2 + i, 3, 1, mid, 'head')
-        buf.put(x + (side < 0 ? 0 : 2), headCy + 2 + i, light, 'head')
-        buf.put(x + (side < 0 ? 2 : 0), headCy + 2 + i, shadeC, 'head')
-      }
+    for (let i = 0; i < 10; i++) {
+      buf.put(hx - 1, hy + 2 + i, i % 2 ? hairHi : hair, 'head')
+      buf.put(hx + hw, hy + 2 + i, i % 2 ? hair : hairSh, 'head')
     }
+  }
+
+  if (race === 'dwarf') {
+    // Thick top
+    buf.rect(hx - 1, hy - 2, hw + 2, 3, hair, 'head')
+  }
+}
+
+function drawWeapon(
+  buf: Buf,
+  id: WearableId,
+  x: number,
+  y: number,
+  colors: { primary: string; secondary: string; highlight?: string },
+) {
+  const p = colors.primary
+  const s = colors.secondary
+  const h = colors.highlight ?? shade(p, 40)
+
+  if (id === 'lantern-staff') {
+    buf.rect(x + 1, y - 2, 1, 22, s, 'weapon')
+    buf.rect(x, y - 4, 3, 3, h, 'weapon')
+    buf.put(x + 1, y - 3, '#ffe6a0', 'weapon')
+  } else if (id === 'hunter-bow') {
+    for (let i = 0; i < 14; i++) {
+      const curve = i < 7 ? Math.floor(i / 2) : Math.floor((13 - i) / 2)
+      buf.put(x + curve, y + i, p, 'weapon')
+      buf.put(x, y + i, '#d8d0c0', 'weapon')
+    }
+    buf.rect(x, y + 5, 2, 3, h, 'weapon')
+  } else {
+    // training blade
+    buf.rect(x + 1, y - 4, 1, 12, h, 'weapon')
+    buf.rect(x + 1, y - 4, 1, 1, '#ffffff', 'weapon')
+    buf.rect(x, y + 8, 3, 1, s, 'weapon')
+    buf.rect(x + 1, y + 9, 1, 4, s, 'weapon')
+    buf.put(x + 1, y + 13, h, 'weapon')
   }
 }
 
@@ -576,8 +473,7 @@ function flatten(pixels: Pix[]): Uint8ClampedArray {
   const data = new Uint8ClampedArray(W * H * 4)
   const sorted = [...pixels].sort((a, b) => a.z - b.z)
   for (const p of sorted) {
-    const [r, g, b] = hexToRgb(p.c.length === 9 ? p.c.slice(0, 7) : p.c)
-    // Skip near-transparent fx placeholders with invalid hex
+    const [r, g, b] = hexToRgb(p.c)
     if (Number.isNaN(r)) continue
     const i = (p.y * W + p.x) * 4
     data[i] = r
@@ -604,10 +500,10 @@ export function PixelAvatar({
   className?: string
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  // Large: 2.75× crisp upscale (~352×528). Compact nav chip: ~0.4×.
-  const scale = large ? 2.75 : 0.4
-  const displayW = Math.round(W * scale)
-  const displayH = Math.round(H * scale)
+  // Sheet-style: small native pixels, big crisp upscale
+  const scale = large ? 8 : 2
+  const displayW = W * scale
+  const displayH = H * scale
 
   useEffect(() => {
     const canvas = canvasRef.current
