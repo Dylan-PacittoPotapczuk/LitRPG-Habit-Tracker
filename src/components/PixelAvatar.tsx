@@ -790,9 +790,9 @@ export function PixelAvatar({
   className?: string
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  // Large: ~1.4× crisp upscale → ~358×560 (in the 320–640px tall band).
+  // Large: 1.5× crisp upscale → ~384×600 (middle of the 320–640px tall band).
   // Compact: shrink for nav/class chips.
-  const scale = large ? 1.4 : 0.28
+  const scale = large ? 1.5 : 0.28
   const displayW = Math.round(W * scale)
   const displayH = Math.round(H * scale)
 
