@@ -6,8 +6,7 @@ import type { EquippedLoadout, HeroClass, HeroRace, WearableId } from '../lib/ty
 
 /**
  * Classic r/DnD “100 pixel characters” style:
- * ~32–48px tall heroes in a 32×48 canvas, nearest-neighbor upscaled.
- * Clean outlines, limited palette, readable silhouettes — not muddy blobs.
+ * continuous ~32×48 heroes, clean outline, limited palette.
  */
 const W = 32
 const H = 48
@@ -69,7 +68,6 @@ class Buf {
     if (prev && prev.z > z) return
     this.map.set(key, { x, y, c, z })
   }
-  /** Stamp rows: `.` empty. Palette keys = chars. */
   stamp(x0: number, y0: number, rows: string[], pal: Record<string, string>, layer: Layer) {
     for (let y = 0; y < rows.length; y++) {
       const row = rows[y]
@@ -100,12 +98,22 @@ class Buf {
   }
 }
 
-/** Vertical offset so dwarf sits lower / shorter; elf taller. */
-function yOffset(race: HeroRace | null): number {
-  if (race === 'dwarf') return 8
-  if (race === 'elf') return 0
-  if (race === 'orc') return 1
-  return 2
+/**
+ * Continuous layout (human baseline, feet at y≈40):
+ * hair/hat 2–5 · head 6–12 · neck 13 · torso 14–24 · legs 25–36 · boots 37–40 · ground 41–43
+ * Dwarf shifts everything down + shortens legs. Elf slightly taller legs.
+ */
+function layout(race: HeroRace | null) {
+  if (race === 'dwarf') {
+    return { headY: 12, torsoY: 20, torsoH: 9, legY: 29, legH: 7, bootY: 36, stout: true }
+  }
+  if (race === 'elf') {
+    return { headY: 4, torsoY: 13, torsoH: 11, legY: 24, legH: 12, bootY: 36, stout: false }
+  }
+  if (race === 'orc') {
+    return { headY: 5, torsoY: 14, torsoH: 11, legY: 25, legH: 11, bootY: 36, stout: true }
+  }
+  return { headY: 6, torsoY: 14, torsoH: 11, legY: 25, legH: 11, bootY: 36, stout: false }
 }
 
 function buildSprite(
@@ -117,7 +125,7 @@ function buildSprite(
   const buf = new Buf()
   const race = raceDef(heroRace) ?? raceDef('human')!
   const cls = classDef(heroClass)
-  const yo = yOffset(heroRace)
+  const L = layout(heroRace)
 
   const S = race.skin.mid
   const S1 = race.skin.light
@@ -130,35 +138,38 @@ function buildSprite(
     H1 = '#5a5a7a'
     H2 = '#12122a'
   } else if (heroClass === 'rogue') {
-    Hm = shade(Hm, -30)
-    H1 = shade(H1, -20)
+    Hm = shade(Hm, -25)
+    H1 = shade(H1, -15)
     H2 = '#0a0806'
   }
   const T = cls?.palette.tunic ?? '#6b5a4a'
-  const A = cls?.palette.accent ?? '#d4894a'
-  const P = shade(T, -45)
-  const B = '#2a2018'
-  const E = race.eye
-  const L = race.lip
+  const Acc = cls?.palette.accent ?? '#d4894a'
+  const Pant = shade(T, -40)
+  const Boot = '#2a2018'
+  const Eye = race.eye
+  const Lip = race.lip
 
   const chest = equipped.chest ? WEARABLES[equipped.chest] : null
   const cape = equipped.cape ? WEARABLES[equipped.cape] : null
   const weapon = equipped.weapon ? WEARABLES[equipped.weapon] : null
   const accessory = equipped.accessory ? WEARABLES[equipped.accessory] : null
 
-  // Ground disk
-  buf.stamp(8, 44, ['..######..', '.########.', '..######..'], { '#': GROUND }, 'ground')
-  buf.put(12, 45, GROUND_EDGE, 'ground')
-  buf.put(19, 45, GROUND_EDGE, 'ground')
+  const tw = L.stout ? 10 : 8
+  const tx = L.stout ? 11 : 12
 
-  // Cape behind
+  // Ground under feet
+  buf.stamp(9, 41, ['..######..', '.########.', '..######..'], { '#': GROUND }, 'ground')
+  buf.put(11, 42, GROUND_EDGE, 'ground')
+  buf.put(20, 42, GROUND_EDGE, 'ground')
+
+  // Cape behind torso
   if (cape) {
     const Cp = cape.colors.primary
     const Cs = cape.colors.secondary
     const Ch = cape.colors.highlight ?? shade(Cp, 28)
     buf.stamp(
-      9,
-      yo + 12,
+      10,
+      L.torsoY - 1,
       [
         '..hh..',
         '.hppp.',
@@ -174,106 +185,74 @@ function buildSprite(
       { h: Ch, p: Cp, s: Cs },
       'cape',
     )
-    // Wider side panels
-    buf.stamp(
-      7,
-      yo + 14,
-      ['p.', 'p.', 'p.', 's.', 's.', 's.', '.s'],
-      { p: Cp, s: Cs },
-      'cape',
-    )
-    buf.stamp(
-      23,
-      yo + 14,
-      ['.p', '.p', '.p', '.s', '.s', '.s', 's.'],
-      { p: Cp, s: Cs },
-      'cape',
-    )
+    buf.stamp(tx - 3, L.torsoY + 1, ['p', 'p', 'p', 'p', 's', 's', 's'], { p: Cp, s: Cs }, 'cape')
+    buf.stamp(tx + tw + 2, L.torsoY + 1, ['p', 'p', 'p', 'p', 's', 's', 's'], { p: Cp, s: Cs }, 'cape')
   }
 
-  // Legs + boots (race width)
-  const stout = heroRace === 'dwarf' || heroRace === 'orc'
-  const legRows = stout
-    ? ['##..##', '##..##', '##..##', '##..##', '##..##', 'bb..bb', 'bb..bb']
-    : ['#...#.', '#...#.', '#...#.', '#...#.', '#...#.', 'b...b.', 'bb.bb.']
-  const bootC =
-    accessory?.id === 'verdant-boots' ? accessory.colors.primary : B
-  const bootH =
+  // Legs connected to torso bottom
+  const legRows: string[] = []
+  for (let i = 0; i < L.legH; i++) {
+    legRows.push(L.stout ? '##..##' : '#....#')
+  }
+  buf.stamp(L.stout ? 13 : 13, L.legY, legRows, { '#': Pant }, 'body')
+
+  // Boots
+  const bootC = accessory?.id === 'verdant-boots' ? accessory.colors.primary : Boot
+  const bootHi =
     accessory?.id === 'verdant-boots'
       ? (accessory.colors.highlight ?? shade(bootC, 25))
-      : shade(B, 20)
-  buf.stamp(13, yo + 30, legRows, { '#': P, b: bootC }, 'body')
-  if (accessory?.id === 'verdant-boots') {
-    buf.put(13, yo + 35, bootH, 'accessory')
-    buf.put(18, yo + 35, bootH, 'accessory')
-  }
-
-  // Arms (skin)
+      : shade(Boot, 18)
   buf.stamp(
-    10,
-    yo + 14,
-    ['S', 'S', 'S', 'S', 'S', '1'],
-    { S, '1': S1 },
-    'body',
+    L.stout ? 12 : 12,
+    L.bootY,
+    L.stout ? ['####..####', '####..####', '####..####'] : ['###..###', '###..###', '####.####'],
+    { '#': bootC },
+    accessory?.id === 'verdant-boots' ? 'accessory' : 'body',
   )
-  buf.stamp(
-    21,
-    yo + 14,
-    ['S', 'S', 'S', 'S', 'S', '2'],
-    { S, '2': S2 },
-    'body',
-  )
+  buf.put(13, L.bootY, bootHi, accessory?.id === 'verdant-boots' ? 'accessory' : 'body')
+  buf.put(18, L.bootY, bootHi, accessory?.id === 'verdant-boots' ? 'accessory' : 'body')
 
-  // Torso undershirt
-  const torsoW = stout ? 10 : 8
-  const tx = stout ? 11 : 12
-  buf.stamp(
-    tx,
-    yo + 14,
-    stout
-      ? ['TTTTTTTTTT', 'TTTTTTTTTT', 'TTTTTTTTTT', 'TTTTTTTTTT', 'TTTTTTTTTT', 'TTTTTTTTTT', 'TTTTTTTTTT']
-      : ['TTTTTTTT', 'TTTTTTTT', 'TTTTTTTT', 'TTTTTTTT', 'TTTTTTTT', 'TTTTTTTT', 'TTTTTTTT'],
-    { T },
-    'body',
-  )
-  buf.put(tx, yo + 15, shade(T, -30), 'body')
-  buf.put(tx + torsoW - 1, yo + 15, shade(T, -15), 'body')
+  // Arms
+  buf.stamp(tx - 2, L.torsoY + 1, ['S', 'S', 'S', 'S', 'S', '1'], { S, '1': S1 }, 'body')
+  buf.stamp(tx + tw + 1, L.torsoY + 1, ['S', 'S', 'S', 'S', 'S', '2'], { S, '2': S2 }, 'body')
 
-  // Chest armor overlay
-  if (chest) drawChest(buf, chest.id, tx, yo + 14, torsoW, chest.colors, A)
+  // Torso (undershirt) — contiguous block
+  const torsoRows = Array.from({ length: L.torsoH }, () => '#'.repeat(tw))
+  buf.stamp(tx, L.torsoY, torsoRows, { '#': T }, 'body')
+  buf.put(tx, L.torsoY + 1, shade(T, -30), 'body')
+  buf.put(tx + tw - 1, L.torsoY + 1, shade(T, -15), 'body')
+
+  // Chest armor
+  if (chest) drawChest(buf, chest.id, tx, L.torsoY, tw, L.torsoH, chest.colors, Acc)
 
   // Bracers
   if (accessory?.id === 'rune-bracers' || accessory?.id === 'copper-ring') {
     const ap = accessory.colors.primary
     const ah = accessory.colors.highlight ?? shade(ap, 30)
-    buf.stamp(10, yo + 18, ['#', 'h'], { '#': ap, h: ah }, 'accessory')
-    buf.stamp(21, yo + 18, ['#', 'h'], { '#': ap, h: ah }, 'accessory')
+    buf.stamp(tx - 2, L.torsoY + 5, ['#', 'h'], { '#': ap, h: ah }, 'accessory')
+    buf.stamp(tx + tw + 1, L.torsoY + 5, ['#', 'h'], { '#': ap, h: ah }, 'accessory')
   }
 
-  // Neck
-  buf.stamp(15, yo + 12, ['.SS.', 'SSSS'], { S, '.': '' }, 'body')
-  // fix empty key — redraw neck cleanly
-  buf.put(15, yo + 13, S, 'body')
-  buf.put(16, yo + 12, S, 'body')
-  buf.put(17, yo + 12, S, 'body')
-  buf.put(16, yo + 13, S, 'body')
-  buf.put(17, yo + 13, S1, 'body')
+  // Neck joins head to torso
+  buf.stamp(15, L.torsoY - 1, ['SS'], { S }, 'body')
+  buf.put(15, L.headY + 6, S, 'body')
+  buf.put(16, L.headY + 6, S1, 'body')
 
-  // Head by race
-  drawHead(buf, yo, heroRace, S, S1, S2, Hm, H1, H2, E, L, heroClass, T, A)
+  // Head
+  drawHead(buf, L.headY, heroRace, S, S1, S2, Hm, H1, H2, Eye, Lip, heroClass, T, Acc)
 
   // Crown
   if (accessory?.id === 'crown-of-dawn') {
     const cp = accessory.colors.primary
     const ch = accessory.colors.highlight ?? '#fff0a8'
-    buf.stamp(13, yo + 2, ['.#.#.#.', '#######'], { '#': cp }, 'accessory')
-    buf.put(14, yo + 1, ch, 'accessory')
-    buf.put(16, yo + 0, ch, 'accessory')
-    buf.put(18, yo + 1, ch, 'accessory')
+    buf.stamp(13, L.headY - 2, ['.#.#.#.', '#######'], { '#': cp }, 'accessory')
+    buf.put(14, L.headY - 3, ch, 'accessory')
+    buf.put(16, L.headY - 4, ch, 'accessory')
+    buf.put(18, L.headY - 3, ch, 'accessory')
   }
 
-  // Weapon (right side)
-  if (weapon) drawWeapon(buf, weapon.id, 23, yo + 10, weapon.colors)
+  // Weapon
+  if (weapon) drawWeapon(buf, weapon.id, tx + tw + 3, L.torsoY - 2, weapon.colors)
 
   buf.outlinePass()
   const pixels = buf.pixels()
@@ -283,7 +262,7 @@ function buildSprite(
 
 function drawHead(
   buf: Buf,
-  yo: number,
+  headY: number,
   race: HeroRace | null,
   S: string,
   S1: string,
@@ -291,93 +270,50 @@ function drawHead(
   Hm: string,
   H1: string,
   H2: string,
-  E: string,
+  Eye: string,
   Lip: string,
   heroClass: HeroClass | null,
   tunic: string,
   accent: string,
 ) {
-  const hy = yo + 4
-  // Base head oval-ish
-  if (race === 'dwarf') {
-    buf.stamp(
-      13,
-      hy,
-      [
-        '.####.',
-        '######',
-        '######',
-        '######',
-        '######',
-        '.####.',
-      ],
-      { '#': S },
-      'head',
-    )
-  } else if (race === 'orc') {
-    buf.stamp(
-      12,
-      hy,
-      [
-        '.#####.',
-        '#######',
-        '#######',
-        '#######',
-        '#######',
-        '.#####.',
-      ],
-      { '#': S },
-      'head',
-    )
-  } else {
-    buf.stamp(
-      13,
-      hy,
-      [
-        '.####.',
-        '######',
-        '######',
-        '######',
-        '######',
-        '.####.',
-      ],
-      { '#': S },
-      'head',
-    )
-  }
-  buf.put(14, hy + 1, S1, 'head')
-  buf.put(13, hy + 2, S2, 'head')
+  // Head body (6 tall)
+  const head =
+    race === 'orc'
+      ? ['.#####.', '#######', '#######', '#######', '#######', '.#####.']
+      : ['.####.', '######', '######', '######', '######', '.####.']
+  const hx = race === 'orc' ? 12 : 13
+  buf.stamp(hx, headY, head, { '#': S }, 'head')
+  buf.put(hx + 1, headY + 1, S1, 'head')
+  buf.put(hx, headY + 2, S2, 'head')
 
   // Ears
   if (race === 'elf') {
-    buf.stamp(12, hy + 1, ['1', 'S', 'S'], { '1': S1, S }, 'head')
-    buf.stamp(19, hy + 1, ['1', 'S', 'S'], { '1': S1, S }, 'head')
-    buf.put(12, hy, S1, 'head')
-    buf.put(19, hy, S, 'head')
+    buf.put(12, headY + 1, S1, 'head')
+    buf.put(12, headY, S1, 'head')
+    buf.put(11, headY, S1, 'head')
+    buf.put(19, headY + 1, S, 'head')
+    buf.put(19, headY, S, 'head')
+    buf.put(20, headY, S, 'head')
   } else if (race === 'orc') {
-    buf.put(12, hy + 2, S, 'head')
-    buf.put(20, hy + 2, S2, 'head')
-  } else if (race === 'human') {
-    buf.put(12, hy + 2, S, 'head')
-    buf.put(19, hy + 2, S, 'head')
+    buf.put(11, headY + 2, S, 'head')
+    buf.put(20, headY + 2, S2, 'head')
+  } else if (race !== 'dwarf') {
+    buf.put(hx - 1, headY + 2, S, 'head')
+    buf.put(hx + 6, headY + 2, S, 'head')
   }
 
   // Eyes
-  const eyeY = hy + 2
-  buf.put(14, eyeY, '#f4efe6', 'head')
-  buf.put(17, eyeY, '#f4efe6', 'head')
-  buf.put(14, eyeY, E, 'head')
-  buf.put(17, eyeY, E, 'head')
+  const eyeY = headY + 2
+  buf.put(14, eyeY, Eye, 'head')
+  buf.put(17, eyeY, Eye, 'head')
   if (race === 'orc') {
     buf.put(14, eyeY - 1, S2, 'head')
     buf.put(17, eyeY - 1, S2, 'head')
   }
 
-  // Nose
+  // Nose + mouth
   buf.put(15, eyeY + 1, S2, 'head')
   buf.put(16, eyeY + 1, S2, 'head')
-
-  // Mouth / tusks
   if (race === 'orc') {
     buf.put(14, eyeY + 3, Lip, 'head')
     buf.put(17, eyeY + 3, Lip, 'head')
@@ -388,39 +324,24 @@ function drawHead(
     buf.put(16, eyeY + 3, Lip, 'head')
   }
 
-  // Beard (dwarf)
+  // Dwarf beard (hangs onto chest)
   if (race === 'dwarf') {
     buf.stamp(
       13,
-      hy + 5,
-      [
-        '######',
-        '.####.',
-        '.####.',
-        '..##..',
-        '..##..',
-        '...#..',
-      ],
+      headY + 5,
+      ['######', '.####.', '.####.', '..##..', '..##..'],
       { '#': Hm },
       'head',
     )
-    buf.put(14, hy + 6, H1, 'head')
-    buf.put(17, hy + 6, H2, 'head')
+    buf.put(14, headY + 6, H1, 'head')
   }
 
-  // Hair / class hats
+  // Mage hat
   if (heroClass === 'mage') {
     buf.stamp(
       12,
-      hy - 6,
-      [
-        '...a...',
-        '..aaa..',
-        '.aaaaa.',
-        '..ttt..',
-        '.tttttt.',
-        'tttttttt',
-      ],
+      headY - 7,
+      ['...a...', '..aaa..', '.aaaaa.', '..ttt..', '.tttttt.', 'tttttttt'],
       { a: accent, t: tunic },
       'head',
     )
@@ -428,48 +349,28 @@ function drawHead(
   }
 
   // Hair cap
-  buf.stamp(
-    13,
-    hy - 1,
-    [
-      '.####.',
-      '######',
-      '#....#',
-    ],
-    { '#': Hm },
-    'head',
-  )
-  buf.put(14, hy - 1, H1, 'head')
-  buf.put(13, hy, H2, 'head')
+  buf.stamp(13, headY - 1, ['.####.', '######'], { '#': Hm }, 'head')
+  buf.put(14, headY - 1, H1, 'head')
+  buf.put(13, headY, H2, 'head')
+  buf.put(18, headY, H2, 'head')
 
   if (heroClass === 'rogue') {
-    buf.stamp(
-      12,
-      hy,
-      [
-        '########',
-        '########',
-        '##....##',
-      ],
-      { '#': H2 },
-      'head',
-    )
-    // eye slits already eyes underneath
+    buf.stamp(12, headY, ['########', '##....##'], { '#': H2 }, 'head')
   }
 
   if (heroClass === 'ranger' || race === 'elf') {
-    for (let i = 0; i < 7; i++) {
-      buf.put(12, hy + 2 + i, i % 2 ? H1 : Hm, 'head')
-      buf.put(19, hy + 2 + i, i % 2 ? Hm : H2, 'head')
+    for (let i = 0; i < 6; i++) {
+      buf.put(12, headY + 2 + i, i % 2 ? H1 : Hm, 'head')
+      buf.put(19, headY + 2 + i, i % 2 ? Hm : H2, 'head')
     }
   }
 
   if (heroClass === 'warrior') {
-    buf.stamp(14, hy - 1, ['####'], { '#': Hm }, 'head')
+    buf.stamp(14, headY - 1, ['####'], { '#': Hm }, 'head')
   }
 
   if (race === 'dwarf') {
-    buf.stamp(12, hy - 2, ['.######.', '########'], { '#': Hm }, 'head')
+    buf.stamp(12, headY - 2, ['.######.', '########'], { '#': Hm }, 'head')
   }
 }
 
@@ -479,6 +380,7 @@ function drawChest(
   tx: number,
   ty: number,
   tw: number,
+  th: number,
   colors: { primary: string; secondary: string; highlight?: string },
   accent: string,
 ) {
@@ -486,65 +388,40 @@ function drawChest(
   const s = colors.secondary
   const h = colors.highlight ?? shade(p, 32)
 
-  if (id === 'cloth-tunic') {
-    buf.stamp(
-      tx,
-      ty,
-      tw >= 10
-        ? ['pppppppppp', 'phhhhhhhpp', 'pppppppppp', 'pppppppppp', 'pppppppppp', 'ssssssssss']
-        : ['pppppppp', 'phhhhhpp', 'pppppppp', 'pppppppp', 'pppppppp', 'ssssssss'],
-      { p, h, s },
-      'chest',
-    )
-  } else if (id === 'leather-vest') {
-    buf.stamp(
-      tx,
-      ty,
-      tw >= 10
-        ? ['ssppppppss', 'spphhhppps', 'spppssppps', 'spppssppps', 'spppppppps', 'ssssssssss']
-        : ['ssppppss', 'spphhpps', 'sppsspps', 'sppsspps', 'spppppps', 'ssssssss'],
-      { p, h, s },
-      'chest',
-    )
-  } else if (id === 'iron-mail') {
-    buf.stamp(
-      tx - 1,
-      ty,
-      [
-        'ss........ss',
-        'ssppppppppss',
-        '.phphphphp.',
-        '.pphphphpp.',
-        '.phphphphp.',
-        '.ppppppppp.',
-        '.ssssssssss.',
-      ],
-      { p, h, s },
-      'chest',
-    )
-  } else if (id === 'ember-plate') {
-    buf.stamp(
-      tx - 1,
-      ty,
-      [
-        'ss........ss',
-        'ssppppppppss',
-        '.pphhhhhhpp.',
-        '.ppsssssspp.',
-        '.pphhhahhpp.',
-        '.pppppppppp.',
-        '.ssssssssss.',
-      ],
-      { p, h, s, a: '#ffe0a0' },
-      'chest',
-    )
+  // Fill torso area with armor, keep contiguous
+  for (let y = 0; y < th - 1; y++) {
+    for (let x = 0; x < tw; x++) {
+      let c = p
+      if (id === 'iron-mail' && (x + y) % 2 === 0) c = h
+      if (id === 'leather-vest' && x >= tw / 2 - 1 && x <= tw / 2) c = s
+      if (id === 'cloth-tunic' && y === 1 && x > 0 && x < tw - 1) c = h
+      if (id === 'ember-plate') {
+        if (y % 3 === 1) c = h
+        if (y % 3 === 2) c = s
+        if (y === 3 && x === Math.floor(tw / 2)) c = '#ffe0a0'
+      }
+      buf.put(tx + x, ty + y, c, 'chest')
+    }
   }
 
-  // Belt buckle
-  const bx = tx + Math.floor(tw / 2) - 1
-  buf.put(bx, ty + 5, h, 'chest')
-  buf.put(bx + 1, ty + 5, accent, 'chest')
-  buf.put(bx + 2, ty + 5, h, 'chest')
+  // Pauldrons for metal
+  if (id === 'iron-mail' || id === 'ember-plate') {
+    buf.stamp(tx - 2, ty, ['ss', 'sp', 'ss'], { s, p }, 'chest')
+    buf.stamp(tx + tw, ty, ['ss', 'ps', 'ss'], { s, p }, 'chest')
+    buf.put(tx - 1, ty, h, 'chest')
+    buf.put(tx + tw, ty, h, 'chest')
+  }
+
+  if (id === 'leather-vest') {
+    buf.stamp(tx, ty, ['ss', '..'], { s }, 'chest')
+    buf.stamp(tx + tw - 2, ty, ['ss'], { s }, 'chest')
+  }
+
+  // Belt
+  for (let x = -1; x <= tw; x++) buf.put(tx + x, ty + th - 2, s, 'chest')
+  buf.put(tx + Math.floor(tw / 2) - 1, ty + th - 2, h, 'chest')
+  buf.put(tx + Math.floor(tw / 2), ty + th - 2, accent, 'chest')
+  buf.put(tx + Math.floor(tw / 2) + 1, ty + th - 2, h, 'chest')
 }
 
 function drawWeapon(
@@ -559,66 +436,19 @@ function drawWeapon(
   const h = colors.highlight ?? shade(p, 40)
 
   if (id === 'lantern-staff') {
-    buf.stamp(
-      x,
-      y - 2,
-      [
-        '.h.',
-        'hhh',
-        '.s.',
-        '.s.',
-        '.s.',
-        '.s.',
-        '.s.',
-        '.s.',
-        '.s.',
-        '.s.',
-      ],
-      { h: '#ffe6a0', s },
-      'weapon',
-    )
+    buf.stamp(x, y, ['.g.', 'ggg', '.s.', '.s.', '.s.', '.s.', '.s.', '.s.', '.s.'], { g: '#ffe6a0', s }, 'weapon')
   } else if (id === 'hunter-bow') {
     buf.stamp(
       x,
-      y,
-      [
-        'p..',
-        '.p.',
-        '..p',
-        '..p',
-        '.p.',
-        'p..',
-        '.p.',
-        '..p',
-        '..p',
-        '.p.',
-        'p..',
-      ],
+      y + 2,
+      ['p..', '.p.', '..p', '..p', '.p.', 'p..', '.p.', '..p', '..p', '.p.', 'p..'],
       { p },
       'weapon',
     )
-    // string
-    for (let i = 0; i < 11; i++) buf.put(x, y + i, '#d8d0c0', 'weapon')
-    buf.put(x + 1, y + 5, h, 'weapon')
+    for (let i = 0; i < 11; i++) buf.put(x, y + 2 + i, '#d8d0c0', 'weapon')
+    buf.put(x + 1, y + 7, h, 'weapon')
   } else {
-    buf.stamp(
-      x,
-      y - 2,
-      [
-        '.h',
-        '.h',
-        '.h',
-        '.h',
-        '.h',
-        '.p',
-        'sss',
-        '.s.',
-        '.s.',
-        '.h.',
-      ],
-      { h, p, s },
-      'weapon',
-    )
+    buf.stamp(x, y, ['.h', '.h', '.h', '.h', '.h', '.p', 'sss', '.s.', '.s.', '.h.'], { h, p, s }, 'weapon')
   }
 }
 
