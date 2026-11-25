@@ -13,7 +13,7 @@ export function AvatarPortrait({ large = false }: { large?: boolean }) {
         heroClass={player.heroClass}
         equipped={player.equipped}
         damaged={player.gearDamaged}
-        large={large}
+        size={large ? 'large' : 'compact'}
       />
       {player.gearDamaged ? (
         <span className="avatar-damage-tag" title="Heal to full HP to mend gear">

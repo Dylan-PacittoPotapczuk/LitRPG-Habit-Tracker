@@ -38,7 +38,7 @@ export function ClassSelect({
             heroRace={race}
             heroClass={step === 'class' ? heroClass : null}
             equipped={{ chest: 'cloth-tunic' }}
-            large
+            size="large"
           />
           <div className="class-select-copy">
             {step === 'race' ? (
@@ -69,7 +69,12 @@ export function ClassSelect({
                 className={`class-card ${race === r.id ? 'selected' : ''}`}
                 onClick={() => setRace(r.id)}
               >
-                <PixelAvatar heroRace={r.id} heroClass={null} equipped={{ chest: 'cloth-tunic' }} />
+                <PixelAvatar
+                  heroRace={r.id}
+                  heroClass={null}
+                  equipped={{ chest: 'cloth-tunic' }}
+                  size="card"
+                />
                 <span className="class-card-name">{r.name}</span>
               </button>
             ))}
@@ -89,6 +94,7 @@ export function ClassSelect({
                   heroRace={race}
                   heroClass={c.id}
                   equipped={{ chest: 'cloth-tunic' }}
+                  size="card"
                 />
                 <span className="class-card-name">{c.name}</span>
               </button>

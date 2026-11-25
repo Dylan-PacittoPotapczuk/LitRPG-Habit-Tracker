@@ -1,10 +1,15 @@
 import { AvatarPortrait } from '../components/AvatarPortrait'
+import { PixelAvatar } from '../components/PixelAvatar'
 import { classDef } from '../lib/classes'
 import { levelFromXp, progressInLevel } from '../lib/game'
 import { raceDef } from '../lib/races'
-import { BADGES, type BadgeId, type WearableId } from '../lib/types'
+import { BADGES, type BadgeId, type EquippedLoadout, type WearableId, type WearableSlot } from '../lib/types'
 import { useStore } from '../lib/store'
 import { SLOT_LABELS, SLOT_ORDER, unlockReason, WEARABLES, WEARABLE_IDS } from '../lib/wearables'
+
+function armoryPreview(slot: WearableSlot, id: WearableId, base: EquippedLoadout): EquippedLoadout {
+  return { ...base, [slot]: id }
+}
 
 export function HeroPage() {
   const { state, setEquipped } = useStore()
@@ -69,7 +74,14 @@ export function HeroPage() {
                       disabled={!owned}
                       onClick={() => setEquipped(equipped ? null : (item.id as WearableId), slot)}
                     >
-                      <div className="glyph">{item.glyph}</div>
+                      <div className="armory-icon">
+                        <PixelAvatar
+                          heroRace={player.heroRace}
+                          heroClass={player.heroClass}
+                          equipped={armoryPreview(slot, item.id, player.equipped)}
+                          size="icon"
+                        />
+                      </div>
                       <div className="name">{item.name}</div>
                       <p className="blurb">
                         {owned
