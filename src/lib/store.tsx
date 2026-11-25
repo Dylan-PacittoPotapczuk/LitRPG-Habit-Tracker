@@ -13,17 +13,32 @@ import { addDays, todayKey } from './date'
 import {
   addTodo,
   atone,
+  chooseHero,
   createInitialState,
-  equipLoot,
+  debugGrantWearable,
+  equipWearable,
   needsAtonement,
   removeTodo,
   resetToday,
+  respecClass,
+  respecRace,
   rolloverIfNeeded,
   setVibe,
   toggleHabit,
   toggleTodo,
+  titleForLevel,
+  xpForLevel,
 } from './game'
-import type { AppState, HabitId, LootId, ToastEvent, VibeId } from './types'
+import type {
+  AppState,
+  HabitId,
+  HeroClass,
+  HeroRace,
+  ToastEvent,
+  VibeId,
+  WearableId,
+  WearableSlot,
+} from './types'
 
 interface StoreApi {
   state: AppState
@@ -32,17 +47,22 @@ interface StoreApi {
   dismissToast: (id: string) => void
   today: string
   showAtonement: boolean
+  needsClassSelect: boolean
   checkHabit: (id: HabitId) => void
   pickVibe: (id: VibeId) => void
   createTodo: (title: string) => void
   checkTodo: (id: string) => void
   deleteTodo: (id: string) => void
   doAtone: () => void
-  setEquipped: (id: LootId | null) => void
+  setEquipped: (id: WearableId | null, slot?: WearableSlot) => void
+  pickHero: (race: HeroRace, heroClass: HeroClass) => void
+  respec: (id: HeroClass) => void
+  respecHeroRace: (id: HeroRace) => void
   demoResetDay: () => void
   exportJson: () => string
   factoryReset: () => Promise<void>
   seedDemoHistory: () => void
+  seedDemoArmory: () => void
 }
 
 const StoreContext = createContext<StoreApi | null>(null)
@@ -118,6 +138,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       dismissToast: (id) => setToasts((t) => t.filter((x) => x.id !== id)),
       today,
       showAtonement: state ? needsAtonement(state, today) : false,
+      needsClassSelect: !!state && (!state.player.heroClass || !state.player.heroRace),
       checkHabit: (id) => mutate((d) => toggleHabit(d, id, today)),
       pickVibe: (id) => mutate((d) => setVibe(d, id, today)),
       createTodo: (title) =>
@@ -132,11 +153,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return []
         }),
       doAtone: () => mutate((d) => atone(d, today)),
-      setEquipped: (id) =>
+      setEquipped: (id, slot) =>
         mutate((d) => {
-          equipLoot(d, id)
+          equipWearable(d, id, slot)
           return []
         }),
+      pickHero: (race, heroClass) => mutate((d) => chooseHero(d, race, heroClass)),
+      respec: (id) => mutate((d) => respecClass(d, id)),
+      respecHeroRace: (id) => mutate((d) => respecRace(d, id)),
       demoResetDay: () =>
         mutate((d) => {
           resetToday(d, today)
@@ -151,7 +175,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             id: crypto.randomUUID(),
             kind: 'info',
             title: 'Fresh adventurer',
-            detail: 'All local progress cleared.',
+            detail: 'All local progress cleared. Choose race and class to begin.',
           },
         ])
       },
@@ -187,6 +211,44 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               detail: 'Sample past days added (local only).',
             },
           ]
+        }),
+      seedDemoArmory: () =>
+        mutate((d) => {
+          if (!d.player.heroClass) d.player.heroClass = 'ranger'
+          if (!d.player.heroRace) d.player.heroRace = 'elf'
+          d.player.xp = Math.max(d.player.xp, xpForLevel(8))
+          d.player.title = titleForLevel(8)
+          d.player.dayStreak = Math.max(d.player.dayStreak, 7)
+          d.player.longestStreak = Math.max(d.player.longestStreak, 7)
+          const ids: WearableId[] = [
+            'cloth-tunic',
+            'leather-vest',
+            'iron-mail',
+            'training-blade',
+            'lantern-staff',
+            'ember-cloak',
+            'shadow-cape',
+            'copper-ring',
+            'hunter-bow',
+            'rune-bracers',
+          ]
+          const toasts: ToastEvent[] = []
+          for (const id of ids) {
+            toasts.push(...debugGrantWearable(d, id))
+          }
+          d.player.equipped = {
+            chest: 'iron-mail',
+            weapon: 'hunter-bow',
+            cape: 'ember-cloak',
+            accessory: 'copper-ring',
+          }
+          toasts.push({
+            id: crypto.randomUUID(),
+            kind: 'loot',
+            title: 'Demo armory ready',
+            detail: 'Sample gear unlocked and equipped for screenshots.',
+          })
+          return toasts
         }),
     }
   }, [state, toasts, today, mutate])

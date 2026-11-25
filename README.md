@@ -1,6 +1,6 @@
 # Emberpath — LitRPG Habit Tracker
 
-Offline-first installable PWA: fantasy LitRPG habits + one-off todos, daily vibe check, XP/levels, streaks, badges, avatar/loot, light miss-day penalties, and a Chronicle with charts + weekly summary.
+Offline-first installable PWA: fantasy LitRPG habits + one-off todos, daily vibe check, XP/levels, streaks, badges, **pixel class avatar + unlockable armor/wearables**, light miss-day penalties, and a Chronicle with charts + weekly summary.
 
 Local persistence only (IndexedDB + localStorage fallback). No auth or backend in v1.
 
@@ -29,10 +29,12 @@ npm run preview
 
 ## What’s in v1
 
+- **Race + class select** — Human / Elf / Dwarf / Orc, then Warrior / Mage / Ranger / Rogue; soft habit XP bias; respec both in Settings
 - **Today** — brand hero, vibe check (5 funny feeling-emojis, once/day), 10 recurring habits, optional todos, XP/HP/streak bars, atonement after a miss
-- **Hero** — avatar stages, level/title, badges, equippable loot unlocks
+- **Hero** — dense ~256×400 layered pixel avatar (facial detail, fabric folds, armor rivets, race silhouettes, idle bob), armory grid (chest / weapon / cape / accessory), badges, live equip preview
+- **Loot unlocks** — ~13 wearables via level, streak, or full-clear loot rolls; miss-day scuffs gear until healed
 - **Chronicle** — completion / mood / XP charts + weekly summary (no heatmap)
-- **Settings** — demo reset, seed history, JSON export, factory reset, install notes
+- **Settings** — race + class respec, demo reset/seed, JSON export, factory reset, install notes
 
 ### Default habits
 

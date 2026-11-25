@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ClassSelect } from './components/ClassSelect'
 import { Nav, type Tab } from './components/Nav'
 import { ToastStack } from './components/ToastStack'
 import { StoreProvider, useStore } from './lib/store'
@@ -8,7 +9,7 @@ import { SettingsPage } from './pages/Settings'
 import { TodayPage } from './pages/Today'
 
 function Shell() {
-  const { ready } = useStore()
+  const { ready, needsClassSelect, pickHero } = useStore()
   const [tab, setTab] = useState<Tab>('today')
 
   if (!ready) {
@@ -18,6 +19,7 @@ function Shell() {
   return (
     <div className="app-shell">
       <ToastStack />
+      {needsClassSelect ? <ClassSelect onChoose={pickHero} /> : null}
       {tab === 'today' ? <TodayPage /> : null}
       {tab === 'hero' ? <HeroPage /> : null}
       {tab === 'chronicle' ? <ChroniclePage /> : null}

@@ -128,7 +128,9 @@ export function TodayPage() {
 
       <section className="section">
         <h2>Side quests</h2>
-        <p className="lede">Optional one-off todos for today.</p>
+        <p className="lede">
+          One-off quests — unfinished ones carry to the next day until you complete or delete them.
+        </p>
         <form className="todo-form" onSubmit={onAddTodo}>
           <input
             value={todoText}

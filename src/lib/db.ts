@@ -1,11 +1,11 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
-import { createInitialState } from './game'
+import { createInitialState, migrateState } from './game'
 import type { AppState } from './types'
 
 interface QuestDB extends DBSchema {
   meta: {
     key: string
-    value: AppState
+    value: unknown
   }
 }
 
@@ -30,15 +30,15 @@ export async function loadState(): Promise<AppState> {
   try {
     const db = await getDb()
     const saved = await db.get(STORE, KEY)
-    if (saved && saved.version === 1) return saved
+    if (saved) return migrateState(saved)
   } catch {
     /* fall through */
   }
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) {
-      const parsed = JSON.parse(raw) as AppState
-      if (parsed?.version === 1) return parsed
+      const parsed = JSON.parse(raw) as unknown
+      return migrateState(parsed)
     }
   } catch {
     /* ignore */

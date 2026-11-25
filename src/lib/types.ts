@@ -12,12 +12,29 @@ export type HabitId =
 
 export type VibeId = 'radiant' | 'meh-dragon' | 'chaotic' | 'weary' | 'fire'
 
-export type LootId =
-  | 'ember-cloak'
-  | 'copper-ring'
+export type HeroClass = 'warrior' | 'mage' | 'ranger' | 'rogue'
+
+export type HeroRace = 'human' | 'elf' | 'dwarf' | 'orc'
+
+export type WearableSlot = 'chest' | 'weapon' | 'cape' | 'accessory'
+
+export type WearableId =
+  | 'cloth-tunic'
+  | 'leather-vest'
+  | 'iron-mail'
+  | 'ember-plate'
+  | 'training-blade'
   | 'lantern-staff'
+  | 'hunter-bow'
+  | 'ember-cloak'
+  | 'shadow-cape'
+  | 'copper-ring'
   | 'verdant-boots'
   | 'crown-of-dawn'
+  | 'rune-bracers'
+
+/** @deprecated Prefer WearableId — kept for migration of saved v1 state. */
+export type LootId = WearableId
 
 export type BadgeId =
   | 'first-quest'
@@ -55,6 +72,8 @@ export interface DayRecord {
   todos: TodoItem[]
 }
 
+export type EquippedLoadout = Partial<Record<WearableSlot, WearableId>>
+
 export interface PlayerState {
   xp: number
   hp: number
@@ -63,8 +82,13 @@ export interface PlayerState {
   longestStreak: number
   habitStreaks: Partial<Record<HabitId, number>>
   badges: BadgeId[]
-  loot: LootId[]
-  equippedLoot: LootId | null
+  loot: WearableId[]
+  /** Multi-slot paper-doll equip. */
+  equipped: EquippedLoadout
+  /** Temporary scuffed look after a miss day until healed. */
+  gearDamaged: boolean
+  heroClass: HeroClass | null
+  heroRace: HeroRace | null
   title: string
   lastPlayedDate: string | null
   createdAt: string
@@ -73,7 +97,7 @@ export interface PlayerState {
 export interface AppState {
   player: PlayerState
   days: Record<string, DayRecord>
-  version: 1
+  version: 2
 }
 
 export interface ToastEvent {
@@ -104,13 +128,14 @@ export const VIBES: { id: VibeId; emoji: string; label: string; quip: string }[]
   { id: 'fire', emoji: '🔥', label: 'Fire', quip: 'Ready to raid the day' },
 ]
 
-export const LOOT: Record<LootId, { name: string; level: number; blurb: string; glyph: string }> = {
+/** Compatibility alias used by older call sites — prefer WEARABLES. */
+export const LOOT = {
   'ember-cloak': { name: 'Ember Cloak', level: 2, blurb: 'Warmth from a forge heart', glyph: '🧥' },
   'copper-ring': { name: 'Copper Ring', level: 3, blurb: 'A quiet +1 to resolve', glyph: '💍' },
   'lantern-staff': { name: 'Lantern Staff', level: 5, blurb: 'Lights the next quest', glyph: '🕯️' },
   'verdant-boots': { name: 'Verdant Boots', level: 8, blurb: 'Soft steps on wild paths', glyph: '🥾' },
   'crown-of-dawn': { name: 'Crown of Dawn', level: 10, blurb: 'Sunrise for the steadfast', glyph: '👑' },
-}
+} as const
 
 export const BADGES: Record<BadgeId, { name: string; blurb: string; glyph: string }> = {
   'first-quest': { name: 'First Quest', blurb: 'Completed your first habit', glyph: '🏁' },
