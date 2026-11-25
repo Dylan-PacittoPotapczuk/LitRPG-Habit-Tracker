@@ -163,7 +163,35 @@ export function migrateState(raw: unknown): AppState {
 
 export function ensureDay(state: AppState, date = todayKey()): DayRecord {
   if (!state.days[date]) state.days[date] = emptyDay(date)
+  carryIncompleteTodos(state, date)
   return state.days[date]
+}
+
+/**
+ * Incomplete one-off todos persist across days: move any unfinished todo
+ * from earlier days onto `date` until completed or deleted.
+ * Habits stay per-day (not carried).
+ */
+function carryIncompleteTodos(state: AppState, date: string) {
+  const today = state.days[date]
+  if (!today) return
+  const seen = new Set(today.todos.map((t) => t.id))
+  for (const [d, day] of Object.entries(state.days)) {
+    if (d >= date) continue
+    const remaining: typeof day.todos = []
+    for (const todo of day.todos) {
+      if (todo.completedOn) {
+        remaining.push(todo)
+        continue
+      }
+      if (!seen.has(todo.id)) {
+        today.todos.push(todo)
+        seen.add(todo.id)
+      }
+      // incomplete: leave only on the carry-forward day (drop from old day)
+    }
+    day.todos = remaining
+  }
 }
 
 function clampHp(player: PlayerState) {
@@ -280,6 +308,7 @@ export function rolloverIfNeeded(state: AppState, today = todayKey()): ToastEven
   const player = state.player
   const last = player.lastPlayedDate
 
+  // Always ensure today exists and pull incomplete todos forward.
   ensureDay(state, today)
 
   if (!last) {

@@ -489,10 +489,10 @@ a {
 }
 
 .avatar-stage {
-  width: min(340px, 92vw);
-  min-height: 520px;
+  width: min(400px, 92vw);
+  min-height: 480px;
   height: auto;
-  aspect-ratio: 320 / 500;
+  aspect-ratio: 48 / 64;
   margin: 0 auto 18px;
   border-radius: 28px;
   position: relative;
@@ -625,7 +625,7 @@ a {
 
 .class-select-preview {
   display: grid;
-  grid-template-columns: minmax(200px, 320px) 1fr;
+  grid-template-columns: minmax(200px, 400px) 1fr;
   gap: 16px;
   align-items: center;
   margin-bottom: 16px;
@@ -633,22 +633,18 @@ a {
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(0, 0, 0, 0.22);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .class-select-preview .pixel-avatar.large {
-  /* Show dense native buffer (~320×500) — do NOT CSS-shrink into a stamp */
-  max-height: min(500px, 52dvh);
-  width: auto !important;
-  height: auto !important;
+  /* Keep crisp 8× sheet upscale (~384×512); allow scroll in panel */
+  transform: none;
+  flex-shrink: 0;
 }
 
 .class-select-preview .pixel-avatar.large canvas {
-  max-height: min(500px, 52dvh);
-  width: auto !important;
-  height: 100% !important;
-  max-width: 100%;
-  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .class-select-copy h2 {

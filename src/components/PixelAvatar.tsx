@@ -4,16 +4,13 @@ import type { EquippedLoadout, HeroClass, HeroRace } from '../lib/types'
 
 export type AvatarSize = 'large' | 'card' | 'icon' | 'compact'
 
-/** Display scales — always from the same SPRITE_W×SPRITE_H dense buffer (never a tiny stamp). */
+/** Crisp nearest-neighbor upscale from classic sheet buffer (48×64). */
 const SIZE_SCALE: Record<AvatarSize, number> = {
-  // Native 320×500 — middle of the 320–640px tall band
-  large: 1,
-  // Class / race cards — still readable eyes & rivets
-  card: 0.42,
-  // Armory slot icons
-  icon: 0.28,
-  // Today nav chip
-  compact: 0.22,
+  // ~384×512 presentation (sheet spirit, big on screen)
+  large: 8,
+  card: 3,
+  icon: 2,
+  compact: 1.5,
 }
 
 export function PixelAvatar({
@@ -46,9 +43,10 @@ export function PixelAvatar({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // Prove native buffer is dense (not a 32×48 stamp upscaled).
     // eslint-disable-next-line no-console
-    console.info(`[PixelAvatar] native buffer ${SPRITE_W}×${SPRITE_H} → display ${displayW}×${displayH} (${resolved})`)
+    console.info(
+      `[PixelAvatar] sheet buffer ${SPRITE_W}×${SPRITE_H} → display ${displayW}×${displayH} (${resolved})`,
+    )
 
     const rgba = buildSprite(heroRace ?? null, heroClass, equipped, damaged)
     const img = ctx.createImageData(SPRITE_W, SPRITE_H)
