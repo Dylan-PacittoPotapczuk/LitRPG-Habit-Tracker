@@ -489,8 +489,8 @@ a {
 }
 
 .avatar-stage {
-  width: min(360px, 88vw);
-  min-height: 440px;
+  width: min(400px, 92vw);
+  min-height: 520px;
   aspect-ratio: 256 / 400;
   margin: 0 auto 18px;
   border-radius: 28px;
@@ -714,10 +714,10 @@ a {
 }
 
 .class-select-preview .pixel-avatar.large {
-  /* native 256×400 — fit panel */
-  transform: scale(0.72);
+  /* dense sprite already ~560px; shrink to fit panel */
+  transform: scale(0.55);
   transform-origin: center center;
-  margin: -36px 0;
+  margin: -48px 0;
 }
 
 .class-card .pixel-avatar {
