@@ -223,16 +223,77 @@ export class Pix {
   }
 }
 
-function raceScale(race: HeroRace | null) {
+/** Race silhouette + pose — breaks the wooden-doll A-pose. */
+function racePose(race: HeroRace | null) {
   switch (race) {
     case 'dwarf':
-      return { yShift: 56, headScale: 1.1, torsoW: 1.22, legH: 0.7, armW: 1.18 }
+      // Stout / rugged cool — wide base, low center, fists ready
+      return {
+        yShift: 64,
+        headScale: 1.12,
+        torsoW: 1.32,
+        legH: 0.62,
+        armW: 1.28,
+        hipShift: 0,
+        lean: 0,
+        headTilt: 0,
+        weight: 0 as -1 | 0 | 1,
+        leftArm: 'akimbo' as const,
+        rightArm: 'fist' as const,
+        jaw: 'square' as const,
+        expression: 'grin' as const,
+      }
     case 'elf':
-      return { yShift: 0, headScale: 0.94, torsoW: 0.86, legH: 1.1, armW: 0.88 }
+      // Sleek ethereal weird-beauty — elongated, S-curve, head tilt
+      return {
+        yShift: -4,
+        headScale: 0.9,
+        torsoW: 0.78,
+        legH: 1.18,
+        armW: 0.82,
+        hipShift: -14,
+        lean: -7,
+        headTilt: 5,
+        weight: -1 as -1 | 0 | 1,
+        leftArm: 'grace' as const,
+        rightArm: 'grace' as const,
+        jaw: 'narrow' as const,
+        expression: 'enigmatic' as const,
+      }
     case 'orc':
-      return { yShift: 10, headScale: 1.14, torsoW: 1.2, legH: 0.94, armW: 1.22 }
+      // Fierce / weird intimidating — forward lean, scar, snarl
+      return {
+        yShift: 8,
+        headScale: 1.18,
+        torsoW: 1.28,
+        legH: 0.9,
+        armW: 1.35,
+        hipShift: 8,
+        lean: 10,
+        headTilt: -3,
+        weight: 1 as -1 | 0 | 1,
+        leftArm: 'forward' as const,
+        rightArm: 'fist' as const,
+        jaw: 'heavy' as const,
+        expression: 'snarl' as const,
+      }
     default:
-      return { yShift: 14, headScale: 1, torsoW: 1, legH: 1, armW: 1 }
+      // Human — heroic adventurer cool, contrapposto + smirk
+      return {
+        yShift: 10,
+        headScale: 1,
+        torsoW: 1.02,
+        legH: 1,
+        armW: 1.05,
+        hipShift: 12,
+        lean: 4,
+        headTilt: 2,
+        weight: 1 as -1 | 0 | 1,
+        leftArm: 'loose' as const,
+        rightArm: 'hip' as const,
+        jaw: 'hero' as const,
+        expression: 'smirk' as const,
+      }
   }
 }
 
@@ -246,7 +307,7 @@ export function buildSprite(
   const pix = new Pix()
   const race = raceDef(heroRace) ?? raceDef('human')!
   const cls = classDef(heroClass)
-  const rs = raceScale(heroRace)
+  const rs = racePose(heroRace)
 
   const skin = race.skin
   let hair = { ...race.hair }
@@ -269,74 +330,86 @@ export function buildSprite(
   const weapon = equipped.weapon ? WEARABLES[equipped.weapon] : null
   const accessory = equipped.accessory ? WEARABLES[equipped.accessory] : null
 
-  const cx = Math.floor(SPRITE_W / 2)
+  const cx = Math.floor(SPRITE_W / 2) + rs.lean
+  const headCx = cx + rs.headTilt
   const headCy = 88 + rs.yShift
   const headRx = Math.round(42 * rs.headScale)
-  const headRy = Math.round(50 * rs.headScale)
+  const headRy = Math.round(
+    (rs.jaw === 'narrow' ? 54 : rs.jaw === 'heavy' ? 48 : 50) * rs.headScale,
+  )
   const neckY = headCy + headRy - 2
-  const torsoTop = neckY + 10
+  const torsoTop = neckY + 8
   const torsoW = Math.round(90 * rs.torsoW)
-  const torsoH = Math.round(130 * (heroRace === 'dwarf' ? 0.88 : 1))
+  const torsoH = Math.round(128 * (heroRace === 'dwarf' ? 0.92 : heroRace === 'elf' ? 1.05 : 1))
+  const hipCx = cx + rs.hipShift
   const hipY = torsoTop + torsoH
   const legH = Math.round(145 * rs.legH)
   const footY = Math.min(SPRITE_H - 32, hipY + legH)
   const armW = Math.round(22 * rs.armW)
-  const armLen = Math.round(118 * (heroRace === 'dwarf' ? 0.85 : 1))
-  const shoulderY = torsoTop + 12
+  const armLen = Math.round(118 * (heroRace === 'dwarf' ? 0.8 : heroRace === 'elf' ? 1.08 : 1))
+  const shoulderY = torsoTop + 10
 
   // Ground
-  pix.oval(cx, footY + 12, 72, 14, '#6b4a32', '#8a6848', '#4a3220', 'ground')
-  pix.oval(cx, footY + 10, 58, 10, '#7a5a40', '#9a7858', '#5a4030', 'ground')
-  for (let i = 0; i < 40; i++) {
-    const a = (i / 40) * Math.PI * 2
-    pix.put(cx + Math.round(Math.cos(a) * 50), footY + 10 + Math.round(Math.sin(a) * 8), '#5a4030', 'ground')
-  }
+  pix.oval(hipCx, footY + 12, 72, 14, '#6b4a32', '#8a6848', '#4a3220', 'ground')
+  pix.oval(hipCx, footY + 10, 58, 10, '#7a5a40', '#9a7858', '#5a4030', 'ground')
 
   if (cape) drawCape(pix, cx, shoulderY, torsoW, cape.colors)
 
-  // Legs with seams + knee pad
-  const legGap = Math.round(10 * rs.torsoW)
+  // Legs — contrapposto / race stance (not parallel cylinders)
+  const legGap = Math.round(10 * rs.torsoW) + (heroRace === 'dwarf' ? 6 : 0)
   const legW = Math.round(28 * rs.torsoW)
-  const leftLegX = cx - legGap - legW
-  const rightLegX = cx + legGap
+  const plant = rs.weight // planted leg side
+  const leftLegX = hipCx - legGap - legW - (plant === -1 ? 4 : plant === 1 ? -2 : 0)
+  const rightLegX = hipCx + legGap + (plant === 1 ? 4 : plant === -1 ? -2 : 0)
   for (let y = 0; y < footY - hipY + 4; y++) {
-    const taper = y > legH * 0.72 ? Math.round((y - legH * 0.72) * 0.15) : 0
-    pix.weave(leftLegX + taper, hipY - 2 + y, legW - taper * 2, 1, pant, 'body')
-    pix.weave(rightLegX + taper, hipY - 2 + y, legW - taper * 2, 1, pant, 'body')
-    if (y === Math.round(legH * 0.4)) {
-      pix.rect(leftLegX + 4, hipY - 2 + y, legW - 8, 3, shade(pant, -45), 'body')
-      pix.rect(rightLegX + 4, hipY - 2 + y, legW - 8, 3, shade(pant, -45), 'body')
-      pix.rect(leftLegX + 6, hipY - 3 + y, legW - 12, 1, shade(pant, 20), 'body')
-      pix.rect(rightLegX + 6, hipY - 3 + y, legW - 12, 1, shade(pant, 20), 'body')
+    const t = y / Math.max(1, legH)
+    // weight leg thicker; free leg slight bend/outward
+    const leftBend = plant === -1 ? 0 : Math.round(Math.sin(t * Math.PI) * (heroRace === 'elf' ? 8 : 5))
+    const rightBend = plant === 1 ? 0 : -Math.round(Math.sin(t * Math.PI) * (heroRace === 'elf' ? 8 : 5))
+    const leftThick = plant === -1 ? 2 : 0
+    const rightThick = plant === 1 ? 2 : 0
+    const taper = t > 0.72 ? Math.round((t - 0.72) * 12) : 0
+    pix.weave(
+      leftLegX + leftBend + taper,
+      hipY - 2 + y,
+      legW + leftThick - taper * 2,
+      1,
+      pant,
+      'body',
+    )
+    pix.weave(
+      rightLegX + rightBend + taper,
+      hipY - 2 + y,
+      legW + rightThick - taper * 2,
+      1,
+      pant,
+      'body',
+    )
+    if (y === Math.round(legH * 0.38)) {
+      pix.rect(leftLegX + leftBend + 4, hipY - 2 + y, legW - 8, 3, shade(pant, -45), 'body')
+      pix.rect(rightLegX + rightBend + 4, hipY - 2 + y, legW - 8, 3, shade(pant, -45), 'body')
     }
   }
 
   const bootTop = footY - 34
-  if (accessory?.id === 'verdant-boots') {
-    drawBoots(pix, leftLegX - 2, rightLegX - 2, legW + 4, bootTop, footY, accessory.colors, 'accessory')
-  } else {
-    drawBoots(
-      pix,
-      leftLegX - 2,
-      rightLegX - 2,
-      legW + 4,
-      bootTop,
-      footY,
-      { primary: boot, secondary: shade(boot, -20), highlight: shade(boot, 28) },
-      'body',
-    )
-  }
+  const bootCols =
+    accessory?.id === 'verdant-boots'
+      ? accessory.colors
+      : { primary: boot, secondary: shade(boot, -20), highlight: shade(boot, 28) }
+  const bootLayer = accessory?.id === 'verdant-boots' ? 'accessory' : 'body'
+  drawBoots(pix, leftLegX - 2, rightLegX - 2, legW + 4, bootTop, footY, bootCols, bootLayer)
 
-  // Undershirt — tapered torso with shoulder slope (not a flat box)
+  // Torso — lean + hip offset (S-curve / heroic / stout)
   const tx0 = cx - Math.floor(torsoW / 2)
   for (let y = 0; y < torsoH; y++) {
     const t = y / torsoH
-    const shoulder = t < 0.12 ? Math.round((0.12 - t) * 28) : 0
-    const waist = t > 0.55 ? Math.round((t - 0.55) * 28) : 0
+    const shoulder = t < 0.14 ? Math.round((0.14 - t) * (heroRace === 'orc' ? 40 : 26)) : 0
+    const waist = t > 0.5 ? Math.round((t - 0.5) * (heroRace === 'dwarf' ? 8 : 32)) : 0
+    // interpolate center from shoulders (cx) toward hips (hipCx)
+    const mid = Math.round(cx + (hipCx - cx) * t)
     const w = torsoW + shoulder - waist
-    const x0 = cx - Math.floor(w / 2)
+    const x0 = mid - Math.floor(w / 2)
     pix.weave(x0, torsoTop + y, w, 1, tunic, 'body')
-    // horizontal cloth wrinkle every ~10px
     if (y % 10 === 4) {
       for (let x = 4; x < w - 4; x++) {
         const bump = Math.round(Math.sin(x * 0.35) * 2)
@@ -345,60 +418,145 @@ export function buildSprite(
     }
   }
 
-  if (chest) drawChest(pix, chest.id, cx, torsoTop, torsoW, torsoH, chest.colors, accent)
+  if (chest) drawChest(pix, chest.id, Math.round((cx + hipCx) / 2), torsoTop, torsoW, torsoH, chest.colors, accent)
 
-  // Arms — slight outward bow + deltoid bulge
-  const leftArmX = tx0 - armW - 2
-  const rightArmX = tx0 + torsoW + 2
-  for (let y = 0; y < armLen; y++) {
-    const bow = Math.round(Math.sin((y / armLen) * Math.PI) * 3)
-    const bulge = y < 18 ? Math.round((18 - y) * 0.25) : 0
-    const lw = armW + bulge
-    pix.fold(leftArmX - bow - Math.floor(bulge / 2), shoulderY + y, lw, 1, skin.mid, 'body')
-    pix.fold(rightArmX + bow - Math.floor(bulge / 2), shoulderY + y, lw, 1, skin.mid, 'body')
-    if ((y * 3) % 5 === 0) {
-      pix.put(leftArmX - bow + 4, shoulderY + y, skin.light, 'body')
-      pix.put(rightArmX + bow + 4, shoulderY + y, skin.light, 'body')
-    }
-    if (y === Math.round(armLen * 0.48)) {
-      pix.rect(leftArmX - bow + 2, shoulderY + y, lw - 4, 3, skin.deep, 'body')
-      pix.rect(rightArmX + bow + 2, shoulderY + y, lw - 4, 3, skin.deep, 'body')
-    }
-  }
-  // Shoulders
-  pix.oval(leftArmX + 4, shoulderY + 4, 14, 12, skin.mid, skin.light, skin.shade, 'body')
-  pix.oval(rightArmX + armW - 4, shoulderY + 4, 14, 12, skin.mid, skin.light, skin.shade, 'body')
-  pix.oval(leftArmX + armW / 2 - 3, shoulderY + armLen + 5, 12, 10, skin.mid, skin.light, skin.shade, 'body')
-  pix.oval(rightArmX + armW / 2 + 3, shoulderY + armLen + 5, 12, 10, skin.mid, skin.light, skin.shade, 'body')
-  for (const hx of [leftArmX + armW / 2 - 3, rightArmX + armW / 2 + 3]) {
-    for (let f = -7; f <= 7; f += 3.5) {
-      const fx = Math.round(hx + f)
-      pix.rect(fx - 1, shoulderY + armLen + 12, 3, 7, skin.mid, 'body')
-      pix.put(fx, shoulderY + armLen + 18, skin.shade, 'body')
-      pix.put(fx, shoulderY + armLen + 19, skin.deep, 'body')
-    }
-  }
+  // Arms — pose-driven, not mirrored A-pose
+  const leftShoulderX = tx0 - 4
+  const rightShoulderX = tx0 + torsoW + 4
+  const leftHand = drawArm(pix, 'left', rs.leftArm, leftShoulderX, shoulderY, armW, armLen, skin, heroRace)
+  const rightHand = drawArm(pix, 'right', rs.rightArm, rightShoulderX, shoulderY, armW, armLen, skin, heroRace)
 
   if (accessory?.id === 'rune-bracers' || accessory?.id === 'copper-ring') {
-    drawBracers(pix, leftArmX - 1, rightArmX - 1, armW + 2, shoulderY + Math.round(armLen * 0.62), accessory.colors)
+    drawBracers(
+      pix,
+      leftHand.bracerX,
+      rightHand.bracerX,
+      armW + 2,
+      leftHand.bracerY,
+      accessory.colors,
+    )
   }
 
-  pix.fold(cx - 10, neckY, 20, 14, skin.mid, 'body')
-  pix.put(cx - 10, neckY + 3, skin.shade, 'body')
-  pix.put(cx + 9, neckY + 3, skin.shade, 'body')
+  // Neck follows head tilt
+  pix.fold(headCx - 9, neckY, 18, 14, skin.mid, 'body')
+  pix.put(headCx - 9, neckY + 3, skin.shade, 'body')
+  pix.put(headCx + 8, neckY + 3, skin.shade, 'body')
 
-  drawHead(pix, cx, headCy, headRx, headRy, race, heroRace, heroClass, hair, tunic, accent)
+  drawHead(pix, headCx, headCy, headRx, headRy, race, heroRace, heroClass, hair, tunic, accent, rs)
 
   if (accessory?.id === 'crown-of-dawn') {
-    drawCrown(pix, cx, headCy - headRy - 6, accessory.colors)
+    drawCrown(pix, headCx, headCy - headRy - 6, accessory.colors)
   }
 
-  if (weapon) drawWeapon(pix, weapon.id, rightArmX + armW + 6, shoulderY - 10, weapon.colors)
+  if (weapon) {
+    const wx = rs.rightArm === 'hip' ? rightHand.x + 8 : rightHand.x + armW + 4
+    drawWeapon(pix, weapon.id, wx, rightHand.y - 40, weapon.colors)
+  }
 
   pix.detailPass()
   pix.outlinePass()
   if (damaged) pix.applyDamage()
   return pix.rgba
+}
+
+type ArmStyle = 'loose' | 'hip' | 'fist' | 'akimbo' | 'grace' | 'forward'
+
+function drawArm(
+  pix: Pix,
+  side: 'left' | 'right',
+  style: ArmStyle,
+  shoulderX: number,
+  shoulderY: number,
+  armW: number,
+  armLen: number,
+  skin: { light: string; mid: string; shade: string; deep: string },
+  race: HeroRace | null,
+): { x: number; y: number; bracerX: number; bracerY: number } {
+  const dir = side === 'left' ? -1 : 1
+  let handX = shoulderX + (side === 'left' ? -2 : armW)
+  let handY = shoulderY + armLen
+  const thick = race === 'orc' || race === 'dwarf' ? 4 : 0
+
+  // Soft shoulder blend into torso — no ball-joint doll look
+  for (let y = 0; y < 16; y++) {
+    const w = armW + thick + 8 - Math.floor(y / 3)
+    const x0 = side === 'left' ? shoulderX - w + armW : shoulderX - 4
+    pix.fold(x0, shoulderY + y, w, 1, skin.mid, 'body')
+  }
+
+  for (let y = 0; y < armLen; y++) {
+    const t = y / armLen
+    let ox = 0
+    let wy = y
+    let w = armW + thick
+    if (style === 'hip' && side === 'right') {
+      // hand on hip — elbow out, forearm in
+      ox = Math.round(Math.sin(Math.min(1, t * 1.4) * Math.PI) * 18)
+      if (t > 0.55) {
+        ox = 18 - Math.round((t - 0.55) * 40)
+        wy = y
+      }
+      handX = shoulderX + ox + 4
+      handY = shoulderY + Math.round(armLen * 0.72)
+    } else if (style === 'akimbo') {
+      ox = dir * Math.round(Math.sin(Math.min(1, t * 1.2) * Math.PI) * 16)
+      if (t > 0.5) ox = dir * (16 - Math.round((t - 0.5) * 28))
+      handX = shoulderX + ox + (side === 'left' ? 0 : armW)
+      handY = shoulderY + Math.round(armLen * 0.7)
+    } else if (style === 'fist') {
+      ox = dir * Math.round(Math.sin(t * Math.PI) * 6)
+      w = armW + thick + (t < 0.3 ? 3 : 0)
+      handX = shoulderX + ox + (side === 'left' ? -2 : armW)
+      handY = shoulderY + armLen + 2
+    } else if (style === 'forward') {
+      // aggressive reach
+      ox = dir * -Math.round(t * 10) + (side === 'left' ? -8 : 0)
+      wy = Math.round(y * 0.85)
+      handX = shoulderX + ox + (side === 'left' ? -6 : armW)
+      handY = shoulderY + Math.round(armLen * 0.85)
+    } else if (style === 'grace') {
+      ox = dir * Math.round(Math.sin(t * Math.PI) * 10)
+      wy = y + Math.round(Math.sin(t * Math.PI) * 4)
+      handX = shoulderX + ox + (side === 'left' ? -2 : armW)
+      handY = shoulderY + armLen + 4
+    } else {
+      // loose
+      ox = dir * Math.round(Math.sin(t * Math.PI) * 5)
+      handX = shoulderX + ox + (side === 'left' ? -2 : armW)
+      handY = shoulderY + armLen
+    }
+    const x0 = shoulderX + ox - (side === 'left' ? Math.floor(w / 2) : 0)
+    pix.fold(x0, shoulderY + wy, w, 1, skin.mid, 'body')
+    if ((y * 3) % 5 === 0) pix.put(x0 + 3, shoulderY + wy, skin.light, 'body')
+    if (y === Math.round(armLen * 0.48)) {
+      pix.rect(x0 + 2, shoulderY + wy, w - 4, 3, skin.deep, 'body')
+    }
+  }
+
+  // Hand
+  const hx = handX
+  const hy = handY
+  if (style === 'fist' || style === 'forward' || style === 'akimbo') {
+    pix.oval(hx, hy, 11, 10, skin.mid, skin.light, skin.shade, 'body')
+    // clenched knuckles
+    for (let k = -6; k <= 6; k += 4) {
+      pix.rect(hx + k - 1, hy - 2, 3, 4, skin.shade, 'body')
+      pix.put(hx + k, hy - 3, skin.light, 'body')
+    }
+  } else {
+    pix.oval(hx, hy, 11, 9, skin.mid, skin.light, skin.shade, 'body')
+    for (let f = -6; f <= 6; f += 4) {
+      pix.rect(hx + f - 1, hy + 6, 3, 7, skin.mid, 'body')
+      pix.put(hx + f, hy + 12, skin.shade, 'body')
+    }
+  }
+
+  return {
+    x: hx,
+    y: hy,
+    bracerX: shoulderX + (side === 'left' ? -armW : 0) - 1,
+    bracerY: shoulderY + Math.round(armLen * 0.55),
+  }
 }
 
 function drawCape(
@@ -625,142 +783,268 @@ function drawHead(
   hair: { light: string; mid: string; shade: string },
   tunic: string,
   accent: string,
+  pose: ReturnType<typeof racePose>,
 ) {
   const skin = race.skin
+  const expr = pose.expression
 
-  pix.oval(cx, headCy, headRx, headRy, skin.mid, skin.light, skin.shade, 'head')
-  // forehead highlight
-  pix.oval(cx - 6, headCy - 18, 16, 10, mix(skin.mid, skin.light, 0.5), skin.light, skin.mid, 'head')
-  // cheeks
-  pix.oval(cx - 20, headCy + 10, 10, 8, mix(skin.mid, '#e07060', 0.22), skin.light, skin.shade, 'head')
-  pix.oval(cx + 20, headCy + 10, 10, 8, mix(skin.mid, '#e07060', 0.22), skin.light, skin.shade, 'head')
-  // jaw
-  pix.rect(cx - 14, headCy + headRy - 14, 28, 10, skin.shade, 'head')
-  // freckles / grain
-  for (let i = 0; i < 18; i++) {
-    const fx = cx - 16 + ((i * 7) % 33)
-    const fy = headCy + 4 + ((i * 11) % 20)
-    if ((i * 3) % 5 === 0) pix.put(fx, fy, mix(skin.mid, '#c07050', 0.25), 'head')
+  // Skull shape by jaw type — not a perfect circle
+  if (pose.jaw === 'narrow') {
+    // Elf: elongated oval, high cheekbones
+    pix.oval(cx, headCy - 4, headRx - 4, headRy + 4, skin.mid, skin.light, skin.shade, 'head')
+    pix.oval(cx, headCy + 18, headRx - 10, 22, skin.mid, skin.light, skin.shade, 'head')
+  } else if (pose.jaw === 'heavy') {
+    // Orc: wide cranium + blocky jaw
+    pix.oval(cx, headCy - 6, headRx + 4, headRy - 4, skin.mid, skin.light, skin.shade, 'head')
+    pix.rect(cx - headRx + 4, headCy + 8, headRx * 2 - 8, headRy - 6, skin.mid, 'head')
+    for (let y = 0; y < 18; y++) {
+      const jw = headRx + 6 - Math.floor(y / 3)
+      pix.fold(cx - jw, headCy + headRy - 20 + y, jw * 2, 1, skin.shade, 'head')
+    }
+  } else if (pose.jaw === 'square') {
+    // Dwarf: rounder + broad jaw under beard
+    pix.oval(cx, headCy, headRx + 2, headRy - 4, skin.mid, skin.light, skin.shade, 'head')
+    pix.rect(cx - headRx + 2, headCy + 10, headRx * 2 - 4, 22, skin.mid, 'head')
+  } else {
+    // Human hero: strong chin
+    pix.oval(cx, headCy, headRx, headRy, skin.mid, skin.light, skin.shade, 'head')
+    pix.oval(cx, headCy + headRy - 12, 16, 12, skin.mid, skin.light, skin.shade, 'head')
+    pix.rect(cx - 12, headCy + headRy - 18, 24, 10, skin.shade, 'head')
   }
 
+  pix.oval(cx - 6, headCy - 18, 16, 10, mix(skin.mid, skin.light, 0.5), skin.light, skin.mid, 'head')
+  pix.oval(cx - 18, headCy + 8, 11, 9, mix(skin.mid, '#e07060', 0.2), skin.light, skin.shade, 'head')
+  pix.oval(cx + 18, headCy + 8, 11, 9, mix(skin.mid, '#e07060', 0.2), skin.light, skin.shade, 'head')
+
   // Ears
-  if (race.traits.ears === 'pointed') {
-    const tall = heroRace === 'elf' ? 36 : 20
+  if (heroRace === 'elf') {
+    // Long swept-back ears (weird-beauty signature)
     for (const side of [-1, 1] as const) {
-      for (let i = 0; i < tall; i++) {
-        const taper = Math.max(2, 10 - Math.floor(i / 3))
-        const x = cx + side * (headRx + 1) + (side < 0 ? -taper : 0)
+      for (let i = 0; i < 48; i++) {
+        const sweep = Math.round(i * 0.35)
+        const taper = Math.max(2, 9 - Math.floor(i / 5))
+        const x = cx + side * (headRx - 2 + sweep) + (side < 0 ? -taper : 0)
         for (let t = 0; t < taper; t++) {
-          const c = t === 0 || t === taper - 1 ? skin.shade : i < 5 ? skin.light : skin.mid
-          pix.put(x + t, headCy - 6 - i, c, 'head')
+          const c = t === 0 || t === taper - 1 ? skin.shade : i < 8 ? skin.light : skin.mid
+          pix.put(x + t, headCy - 10 - i + Math.floor(sweep / 2), c, 'head')
         }
-        // inner ear
-        if (i > 4 && i < tall - 6 && taper > 4) {
-          pix.put(x + Math.floor(taper / 2), headCy - 6 - i, mix(skin.mid, '#e08070', 0.3), 'head')
-        }
+      }
+    }
+  } else if (heroRace === 'orc') {
+    for (const side of [-1, 1] as const) {
+      for (let i = 0; i < 22; i++) {
+        const taper = Math.max(2, 8 - Math.floor(i / 3))
+        const x = cx + side * (headRx + 2) + (side < 0 ? -taper : 0)
+        for (let t = 0; t < taper; t++) pix.put(x + t, headCy + 2 - i, t === 0 ? skin.shade : skin.mid, 'head')
       }
     }
   } else if (race.traits.ears === 'round') {
     pix.oval(cx - headRx - 4, headCy + 2, 10, 14, skin.mid, skin.light, skin.shade, 'head')
     pix.oval(cx + headRx + 4, headCy + 2, 10, 14, skin.mid, skin.light, skin.shade, 'head')
-    pix.oval(cx - headRx - 2, headCy + 2, 4, 6, mix(skin.mid, '#e08070', 0.25), skin.light, skin.shade, 'head')
-    pix.oval(cx + headRx + 2, headCy + 2, 4, 6, mix(skin.mid, '#e08070', 0.25), skin.light, skin.shade, 'head')
   } else {
     pix.oval(cx - headRx - 2, headCy + 4, 8, 11, skin.mid, skin.light, skin.shade, 'head')
     pix.oval(cx + headRx + 2, headCy + 4, 8, 11, skin.mid, skin.light, skin.shade, 'head')
   }
 
-  if (race.traits.brow === 'heavy') {
-    pix.rect(cx - 26, headCy - 14, 52, 8, skin.shade, 'head')
-    pix.rect(cx - 24, headCy - 16, 48, 3, skin.deep, 'head')
-    // brow hairs
-    for (let i = -22; i <= 22; i += 2) pix.put(cx + i, headCy - 17, hair.shade, 'hair')
-  }
-
-  // Eyebrows — individual hairs
-  for (const side of [-1, 1] as const) {
-    const bx = cx + side * 16
-    for (let i = -10; i <= 10; i++) {
-      const arch = Math.round((i * i) / 40)
-      const c = i % 3 === 0 ? hair.light : hair.shade
-      pix.put(bx + i * side * 0 + i, headCy - 16 - arch, c, 'hair')
-      pix.put(bx + i, headCy - 15 - arch, hair.mid, 'hair')
-    }
-  }
-
-  // Eyes — large enough to read at card scale
-  const eyeY = headCy - 4
-  const eyeSpread = 16
-  for (const side of [-1, 1] as const) {
-    const ex = cx + side * eyeSpread
-    pix.oval(ex, eyeY, 12, 9, skin.deep, skin.shade, skin.deep, 'head')
-    pix.oval(ex, eyeY, 10, 7, '#f7f2ea', '#ffffff', '#e8e0d4', 'head')
-    pix.oval(ex + side, eyeY, 5, 5, race.eye, shade(race.eye, 45), shade(race.eye, -45), 'head')
-    // iris rings
-    for (let a = 0; a < 8; a++) {
-      const ang = (a / 8) * Math.PI * 2
-      pix.put(ex + side + Math.round(Math.cos(ang) * 3), eyeY + Math.round(Math.sin(ang) * 3), shade(race.eye, -20), 'head')
-    }
-    pix.rect(ex + side - 1, eyeY - 1, 3, 3, '#0a0806', 'head')
-    pix.put(ex + side - 2, eyeY - 3, '#ffffff', 'head')
-    pix.put(ex + side - 1, eyeY - 2, '#ffffff', 'head')
-    // upper lid + lashes
-    pix.rect(ex - 10, eyeY - 7, 20, 3, skin.shade, 'head')
-    for (let i = -9; i <= 9; i += 2) {
-      pix.put(ex + i, eyeY - 8, hair.shade, 'hair')
-      pix.put(ex + i, eyeY - 9, hair.mid, 'hair')
-    }
-    // lower lid
-    pix.rect(ex - 8, eyeY + 5, 16, 2, mix(skin.mid, skin.shade, 0.5), 'head')
-  }
-
-  // Nose — bridge, ball, nostrils (readable at distance)
-  for (let y = 0; y < 18; y++) {
-    const nw = 2 + Math.floor(y / 7)
-    pix.rect(cx - Math.floor(nw / 2), headCy + 2 + y, nw, 1, y < 6 ? skin.light : skin.shade, 'head')
-  }
-  pix.oval(cx, headCy + 20, 8, 6, skin.mid, skin.light, skin.shade, 'head')
-  pix.rect(cx - 7, headCy + 20, 3, 3, skin.deep, 'head')
-  pix.rect(cx + 4, headCy + 20, 3, 3, skin.deep, 'head')
-  pix.put(cx - 6, headCy + 21, '#1a100c', 'head')
-  pix.put(cx + 5, headCy + 21, '#1a100c', 'head')
-  pix.put(cx - 1, headCy + 8, skin.light, 'head')
-  pix.put(cx, headCy + 8, '#fff5e8', 'head')
-
-  // Mouth with lip volume
-  const mouthY = headCy + 28
-  if (race.traits.tusks) {
-    pix.rect(cx - 12, mouthY, 24, 6, race.lip, 'head')
-    pix.rect(cx - 10, mouthY + 1, 20, 3, mix(race.lip, '#fff', 0.18), 'head')
+  // Brows by expression
+  if (expr === 'snarl' || race.traits.brow === 'heavy') {
+    // Angry / heavy — angled down toward nose
     for (const side of [-1, 1] as const) {
-      for (let i = 0; i < 16; i++) {
-        pix.rect(cx + side * 12 - 2, mouthY + i, 5, 1, i < 3 ? '#fff8e8' : '#efe6d4', 'head')
-        pix.put(cx + side * 12, mouthY + i, '#d8d0c0', 'head')
+      for (let i = 0; i < 22; i++) {
+        const y = headCy - 18 + Math.floor(i / 4) * (expr === 'snarl' ? 1 : 0)
+        pix.put(cx + side * (6 + i), y, hair.shade, 'hair')
+        pix.put(cx + side * (6 + i), y + 1, hair.mid, 'hair')
+        pix.put(cx + side * (6 + i), y + 2, skin.deep, 'head')
+      }
+    }
+  } else if (expr === 'enigmatic') {
+    // High arched delicate brows
+    for (const side of [-1, 1] as const) {
+      for (let i = -11; i <= 11; i++) {
+        const arch = Math.round((i * i) / 28) + 2
+        pix.put(cx + side * 15 + i, headCy - 18 - arch, hair.mid, 'hair')
+        pix.put(cx + side * 15 + i, headCy - 17 - arch, hair.light, 'hair')
+      }
+    }
+  } else if (expr === 'grin') {
+    // Dwarf — thick bushy brows
+    for (const side of [-1, 1] as const) {
+      for (let i = -12; i <= 12; i++) {
+        for (let t = 0; t < 4; t++) {
+          pix.put(cx + side * 14 + i, headCy - 16 - t, (i + t) % 2 === 0 ? hair.light : hair.shade, 'hair')
+        }
       }
     }
   } else {
-    pix.rect(cx - 10, mouthY, 20, 5, race.lip, 'head')
-    pix.rect(cx - 8, mouthY + 1, 16, 2, mix(race.lip, '#fff', 0.28), 'head')
-    pix.rect(cx - 6, mouthY + 3, 12, 2, mix(race.lip, '#801020', 0.35), 'head')
-    pix.put(cx - 10, mouthY + 4, skin.shade, 'head')
-    pix.put(cx + 9, mouthY + 4, skin.shade, 'head')
+    // Human — separate angled brows (gap in center, no unibrow)
+    for (const side of [-1, 1] as const) {
+      for (let i = 0; i < 14; i++) {
+        const x = cx + side * (8 + i)
+        const y = headCy - 17 + Math.floor(i / 5) * (side === 1 ? -1 : 0)
+        pix.put(x, y, hair.shade, 'hair')
+        pix.put(x, y + 1, hair.mid, 'hair')
+        pix.put(x, y + 2, hair.shade, 'hair')
+      }
+    }
   }
 
+  // Eyes — smaller, sharper, expression-first (not vacant saucers)
+  const eyeY = headCy + (expr === 'enigmatic' ? -2 : expr === 'snarl' ? -8 : -5)
+  const eyeSpread = expr === 'enigmatic' ? 13 : expr === 'snarl' ? 17 : 15
+  for (const side of [-1, 1] as const) {
+    const ex = cx + side * eyeSpread
+    let rx = 8
+    let ry = 6
+    if (expr === 'enigmatic') {
+      rx = 11
+      ry = 4
+    } else if (expr === 'snarl') {
+      rx = 7
+      ry = 4 // fierce slits
+    } else if (expr === 'smirk') {
+      rx = 8
+      ry = 5 // focused
+    } else if (expr === 'grin') {
+      rx = 8
+      ry = 6
+    }
+
+    pix.oval(ex, eyeY, rx + 1, ry + 1, skin.deep, skin.shade, skin.deep, 'head')
+    const sclera = expr === 'snarl' ? '#e8d0b8' : '#f7f2ea'
+    pix.oval(ex, eyeY, rx - 1, ry - 1, sclera, '#ffffff', '#e8e0d4', 'head')
+
+    const irisR = expr === 'enigmatic' ? 4 : 3
+    const irisOff = expr === 'smirk' ? side * 2 : 0
+    pix.oval(ex + irisOff, eyeY, irisR, irisR, race.eye, shade(race.eye, 45), shade(race.eye, -45), 'head')
+    if (expr === 'enigmatic') {
+      for (let a = 0; a < 10; a++) {
+        const ang = (a / 10) * Math.PI * 2
+        pix.put(
+          ex + Math.round(Math.cos(ang) * 5),
+          eyeY + Math.round(Math.sin(ang) * 3),
+          mix(race.eye, '#a0ffe0', 0.45),
+          'head',
+        )
+      }
+    }
+    pix.rect(ex + irisOff - 1, eyeY - 1, 2, 2, '#0a0806', 'head')
+    pix.put(ex + irisOff - 2, eyeY - 2, '#ffffff', 'head')
+
+    if (expr === 'enigmatic') {
+      pix.rect(ex - rx, eyeY - ry - 1, rx * 2, 5, skin.shade, 'head')
+      pix.rect(ex - rx + 2, eyeY - ry, rx * 2 - 4, 2, skin.mid, 'head')
+    } else if (expr === 'snarl') {
+      pix.rect(ex - rx - 1, eyeY - ry - 2, rx * 2 + 2, 4, skin.deep, 'head')
+      pix.rect(ex - rx, eyeY + ry - 1, rx * 2, 3, skin.shade, 'head')
+    } else {
+      pix.rect(ex - rx, eyeY - ry - 1, rx * 2, 2, skin.shade, 'head')
+    }
+  }
+
+  // Orc battle scar
+  if (heroRace === 'orc') {
+    for (let i = 0; i < 28; i++) {
+      pix.put(cx - 8 + Math.floor(i / 2), headCy - 20 + i, mix(skin.deep, '#4a2020', 0.5), 'head')
+      pix.put(cx - 7 + Math.floor(i / 2), headCy - 20 + i, skin.deep, 'head')
+    }
+  }
+
+  // Nose by race
+  if (heroRace === 'orc') {
+    // Broad flat nose
+    pix.oval(cx, headCy + 14, 14, 10, skin.mid, skin.light, skin.shade, 'head')
+    pix.rect(cx - 10, headCy + 16, 6, 5, skin.deep, 'head')
+    pix.rect(cx + 4, headCy + 16, 6, 5, skin.deep, 'head')
+  } else if (heroRace === 'elf') {
+    // Delicate long bridge
+    for (let y = 0; y < 20; y++) {
+      pix.rect(cx - 1, headCy + y, 2, 1, y < 8 ? skin.light : skin.shade, 'head')
+    }
+    pix.oval(cx, headCy + 20, 5, 4, skin.mid, skin.light, skin.shade, 'head')
+    pix.put(cx - 3, headCy + 21, skin.deep, 'head')
+    pix.put(cx + 2, headCy + 21, skin.deep, 'head')
+  } else if (heroRace === 'dwarf') {
+    pix.oval(cx, headCy + 14, 10, 8, skin.mid, skin.light, skin.shade, 'head')
+    pix.rect(cx - 8, headCy + 16, 4, 4, skin.deep, 'head')
+    pix.rect(cx + 4, headCy + 16, 4, 4, skin.deep, 'head')
+  } else {
+    for (let y = 0; y < 18; y++) {
+      const nw = 2 + Math.floor(y / 7)
+      pix.rect(cx - Math.floor(nw / 2), headCy + 2 + y, nw, 1, y < 6 ? skin.light : skin.shade, 'head')
+    }
+    pix.oval(cx, headCy + 20, 8, 6, skin.mid, skin.light, skin.shade, 'head')
+    pix.rect(cx - 7, headCy + 20, 3, 3, skin.deep, 'head')
+    pix.rect(cx + 4, headCy + 20, 3, 3, skin.deep, 'head')
+  }
+
+  // Mouth by expression
+  const mouthY = headCy + (heroRace === 'orc' ? 30 : 28)
+  if (expr === 'snarl') {
+    // Open snarling mouth + big tusks
+    pix.rect(cx - 14, mouthY, 28, 10, '#2a1810', 'head')
+    pix.rect(cx - 12, mouthY + 1, 24, 4, '#8a3030', 'head')
+    // upper teeth
+    for (let i = -10; i <= 10; i += 4) {
+      pix.rect(cx + i, mouthY + 1, 3, 4, '#f0e8d8', 'head')
+    }
+    // tusks curve out
+    for (const side of [-1, 1] as const) {
+      for (let i = 0; i < 22; i++) {
+        const ox = side * (12 + Math.floor(i / 4))
+        pix.rect(cx + ox - 2, mouthY + 4 + i, 5, 1, i < 4 ? '#fff8e8' : '#e8dcc0', 'head')
+        pix.put(cx + ox, mouthY + 4 + i, '#d0c4a8', 'head')
+      }
+    }
+  } else if (expr === 'smirk') {
+    // Asymmetric confident smirk
+    for (let x = -12; x <= 10; x++) {
+      const lift = x > 2 ? Math.floor((x - 2) / 3) : 0
+      pix.put(cx + x, mouthY - lift, race.lip, 'head')
+      pix.put(cx + x, mouthY + 1 - lift, mix(race.lip, '#fff', 0.3), 'head')
+      if (x > 4) pix.put(cx + x, mouthY + 2 - lift, mix(race.lip, '#801020', 0.3), 'head')
+    }
+    // chin dimple shadow
+    pix.put(cx + 1, mouthY + 8, skin.shade, 'head')
+  } else if (expr === 'enigmatic') {
+    // Small closed mysterious smile
+    for (let x = -8; x <= 8; x++) {
+      const lift = Math.round(Math.sin(((x + 8) / 16) * Math.PI) * 2)
+      pix.put(cx + x, mouthY - lift, race.lip, 'head')
+      pix.put(cx + x, mouthY + 1 - lift, mix(race.lip, '#fff', 0.35), 'head')
+    }
+  } else if (expr === 'grin') {
+    // Broad dwarf grin (mostly hidden by beard later)
+    pix.rect(cx - 14, mouthY, 28, 5, race.lip, 'head')
+    pix.rect(cx - 12, mouthY + 1, 24, 2, mix(race.lip, '#fff', 0.25), 'head')
+    for (let i = -10; i <= 10; i += 3) pix.put(cx + i, mouthY + 2, '#f0e8d8', 'head')
+  } else {
+    pix.rect(cx - 10, mouthY, 20, 5, race.lip, 'head')
+  }
+
+  // Beard / stubble
   if (race.traits.beard === 'full') {
-    for (let y = 0; y < 58; y++) {
-      const w = 22 + Math.floor(y * 0.6) - Math.floor(Math.abs(y - 28) * 0.18)
+    // Braided rugged dwarf beard
+    for (let y = 0; y < 64; y++) {
+      const w = 26 + Math.floor(y * 0.55) - Math.floor(Math.abs(y - 30) * 0.12)
       for (let x = -Math.floor(w / 2); x <= Math.floor(w / 2); x++) {
         const edge = Math.abs(x) > w / 2 - 3
+        const braid = Math.abs(x) < 6 && y > 20
         const strand = (x * 5 + y * 7) % 5 === 0
-        const hi = (x * 3 + y) % 9 === 0
-        const c = edge ? hair.shade : hi ? hair.light : strand ? mix(hair.mid, hair.light, 0.4) : hair.mid
+        let c = edge ? hair.shade : strand ? hair.light : hair.mid
+        if (braid) c = (y + x) % 6 < 3 ? hair.light : hair.shade
         pix.put(cx + x, mouthY + 2 + y, c, 'hair')
       }
     }
-  } else if (race.traits.beard === 'stubble' && heroClass === 'warrior') {
-    for (let y = 0; y < 14; y++) {
+    // Two braid tips with rings
+    for (const bx of [-10, 10]) {
+      pix.rect(cx + bx - 3, mouthY + 58, 6, 10, hair.mid, 'hair')
+      pix.rect(cx + bx - 4, mouthY + 62, 8, 3, accent, 'hair')
+    }
+  } else if (heroRace === 'human') {
+    // Hero stubble
+    for (let y = 0; y < 16; y++) {
       for (let x = -16; x <= 16; x++) {
-        if ((x * 5 + y * 7) % 3 === 0) pix.put(cx + x, mouthY + 3 + y, hair.mid, 'hair')
+        if ((x * 5 + y * 7) % 3 === 0) pix.put(cx + x, mouthY + 2 + y, hair.mid, 'hair')
       }
     }
   }
@@ -801,88 +1085,96 @@ function drawHair(
     return
   }
 
-  // Crown — dense strand field (not a flat helmet plate)
-  for (let y = -8; y < Math.round(headRy * 0.48); y++) {
-    const span = Math.round(
-      Math.sqrt(Math.max(0, 1 - ((y + 8) / (headRy * 0.85 + 8)) ** 2)) * (headRx + 8),
-    )
-    for (let x = -span; x <= span; x++) {
-      const edge = Math.abs(x) > span - 4 || y <= -5
-      const strand = (x * 9 + y * 13) % 3 === 0
-      const hi = (x * 2 + y * 3) % 7 === 0
-      const lo = (x * 5 + y * 2) % 11 === 0
-      let c = hair.mid
-      if (edge) c = hair.shade
-      else if (hi) c = hair.light
-      else if (lo) c = hair.shade
-      else if (strand) c = mix(hair.mid, hair.light, 0.5)
-      pix.put(cx + x, top + y, c, 'hair')
+  if (race === 'orc') {
+    // Fierce topknot + shaved scalp grain
+    for (let y = -6; y < 14; y++) {
+      for (let x = -headRx + 4; x <= headRx - 4; x++) {
+        if ((x * 7 + y * 3) % 5 === 0) pix.put(cx + x, top + 8 + y, hair.shade, 'hair')
+      }
     }
-  }
-  // Explicit strand curves over crown
-  for (let s = -headRx; s <= headRx; s += 3) {
-    for (let i = 0; i < 24; i++) {
-      const wx = Math.round(Math.sin(i * 0.35 + s * 0.2) * 2)
-      pix.put(cx + s + wx, top - 2 + i, i % 2 === 0 ? hair.light : hair.mid, 'hair')
-      if (i % 4 === 0) pix.put(cx + s + wx + 1, top - 2 + i, hair.shade, 'hair')
+    for (let i = 0; i < 42; i++) {
+      const w = Math.max(4, 14 - Math.floor(i / 4))
+      pix.fold(cx - Math.floor(w / 2), top - 6 - i, w, 1, hair.mid, 'hair')
+      pix.put(cx - 1, top - 6 - i, hair.light, 'hair')
+      pix.put(cx + 1, top - 6 - i, hair.shade, 'hair')
     }
-  }
-
-  // Fringe — each strand independent length + twin tip
-  for (let x = -Math.round(headRx * 0.92); x <= Math.round(headRx * 0.92); x++) {
-    if (Math.abs(x) < 5) continue
-    const drop = 12 + (Math.abs(x) % 7) + ((x * x) % 6)
-    for (let y = 0; y < drop; y++) {
-      const c = y === 0 ? hair.light : (x + y) % 3 === 0 ? hair.shade : hair.mid
-      pix.put(cx + x, headCy - 24 + y, c, 'hair')
-      if (y > 2 && y % 3 === 0) pix.put(cx + x + (x > 0 ? 1 : -1), headCy - 24 + y, hair.shade, 'hair')
+  } else if (race === 'elf') {
+    // Dense silvery mass with irregular crown + cascading locks
+    for (let y = -14; y < 22; y++) {
+      const span = Math.round((headRx + 10) * Math.sqrt(Math.max(0, 1 - ((y + 6) / 36) ** 2)))
+      for (let x = -span; x <= span; x++) {
+        const edge = Math.abs(x) > span - 3
+        const c = edge ? hair.shade : (x * 5 + y * 7) % 4 === 0 ? hair.light : hair.mid
+        pix.put(cx + x, top + y, c, 'hair')
+      }
+    }
+    // Face-framing strands
+    for (let x = -Math.round(headRx * 0.85); x <= Math.round(headRx * 0.85); x++) {
+      if (Math.abs(x) < 6) continue
+      const drop = 16 + (Math.abs(x) % 9)
+      for (let y = 0; y < drop; y++) {
+        pix.put(cx + x, headCy - 20 + y, y % 3 === 0 ? hair.light : hair.mid, 'hair')
+      }
+    }
+    // Long locks
+    for (const side of [-1, 1] as const) {
+      for (let strand = 0; strand < 4; strand++) {
+        for (let i = 0; i < 100; i++) {
+          const wave = Math.round(Math.sin(i * 0.14 + strand) * (3 + strand))
+          const x = cx + side * (headRx + strand * 4) + wave
+          for (let t = 0; t < 3; t++) {
+            pix.put(x + t * side, headCy + i, (i + t) % 3 === 0 ? hair.light : hair.mid, 'hair')
+          }
+        }
+      }
+    }
+  } else if (race === 'dwarf') {
+    // Thick wild mop over bushy brows
+    pix.oval(cx, top + 8, headRx + 12, 22, hair.mid, hair.light, hair.shade, 'hair')
+    for (let s = -headRx - 4; s <= headRx + 4; s += 2) {
+      for (let i = 0; i < 16 + (Math.abs(s) % 8); i++) {
+        pix.put(cx + s + ((i * 3) % 3) - 1, top - 2 + i, i % 2 ? hair.light : hair.mid, 'hair')
+      }
+    }
+  } else {
+    // Human — windblown heroic hair with side part
+    for (let y = -10; y < Math.round(headRy * 0.5); y++) {
+      const span = Math.round(
+        Math.sqrt(Math.max(0, 1 - ((y + 10) / (headRy * 0.9 + 10)) ** 2)) * (headRx + 6),
+      )
+      for (let x = -span; x <= span; x++) {
+        const wind = Math.round(Math.sin((y + 10) * 0.2) * 3)
+        const c =
+          (x * 7 + y * 11) % 3 === 0 ? hair.light : Math.abs(x) > span - 3 ? hair.shade : hair.mid
+        pix.put(cx + x + wind, top + y, c, 'hair')
+      }
+    }
+    // Messy fringe swept to one side
+    for (let x = -Math.round(headRx * 0.9); x <= Math.round(headRx * 0.5); x++) {
+      const drop = 14 + (Math.abs(x) % 8)
+      for (let y = 0; y < drop; y++) {
+        pix.put(cx + x + 4, headCy - 22 + y, y % 3 === 0 ? hair.light : hair.mid, 'hair')
+      }
     }
   }
 
   if (heroClass === 'rogue') {
-    for (let y = -10; y < 26; y++) {
-      const span = headRx + 10 - Math.max(0, y - 10)
+    // Hood over whatever hair — keeps race silhouette under
+    for (let y = -10; y < 22; y++) {
+      const span = headRx + 12 - Math.max(0, y - 8)
       for (let x = -span; x <= span; x++) {
-        if (y > 8 && Math.abs(x) < span - 8) continue
-        const fold = Math.abs(x) > span - 3 ? hair.shade : (x + y) % 5 === 0 ? hair.light : hair.mid
-        pix.put(cx + x, headCy - 12 + y, fold, 'hair')
+        if (y > 6 && Math.abs(x) < span - 10) continue
+        pix.put(
+          cx + x,
+          headCy - 14 + y,
+          Math.abs(x) > span - 3 ? hair.shade : mix(hair.mid, '#1a1218', 0.5),
+          'hair',
+        )
       }
-    }
-    pix.rect(cx - headRx + 6, headCy - 6, headRx * 2 - 12, 12, '#1a1218', 'hair')
-    pix.rect(cx - 22, headCy - 4, 12, 8, '#0a0806', 'hair')
-    pix.rect(cx + 10, headCy - 4, 12, 8, '#0a0806', 'hair')
-  }
-
-  if (heroClass === 'ranger' || race === 'elf') {
-    for (const side of [-1, 1] as const) {
-      for (let i = 0; i < 90; i++) {
-        const wave = Math.round(Math.sin(i * 0.16) * 4)
-        const x = cx + side * (headRx + 3) + wave
-        pix.rect(x, headCy + 6 + i, 5, 1, hair.mid, 'hair')
-        pix.put(x + (side < 0 ? 0 : 4), headCy + 6 + i, hair.light, 'hair')
-        pix.put(x + (side < 0 ? 4 : 0), headCy + 6 + i, hair.shade, 'hair')
-        if (i % 8 === 0) pix.put(x + 2, headCy + 6 + i, hair.light, 'hair')
-      }
-    }
-  }
-
-  if (heroClass === 'warrior') {
-    pix.rect(cx - headRx - 4, headCy - 6, 8, 26, hair.shade, 'hair')
-    pix.rect(cx + headRx - 4, headCy - 6, 8, 26, hair.shade, 'hair')
-    for (let i = 0; i < 20; i++) {
-      pix.put(cx - headRx - 2 + (i % 3), headCy - 4 + i, hair.mid, 'hair')
-      pix.put(cx + headRx + (i % 3), headCy - 4 + i, hair.mid, 'hair')
-    }
-  }
-
-  if (race === 'dwarf') {
-    pix.oval(cx, top + 6, headRx + 10, 18, hair.mid, hair.light, hair.shade, 'hair')
-    for (let i = 0; i < 30; i++) {
-      const x = cx - headRx + ((i * 11) % (headRx * 2))
-      pix.put(x, top + 2 + (i % 8), hair.light, 'hair')
     }
   }
 }
+
 
 function drawCrown(
   pix: Pix,

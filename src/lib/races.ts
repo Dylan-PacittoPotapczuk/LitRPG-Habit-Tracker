@@ -25,7 +25,7 @@ export const RACES: RaceDef[] = [
   {
     id: 'human',
     name: 'Human',
-    blurb: 'Versatile folk of the ember roads — balanced frame, warm skin.',
+    blurb: 'Road-scarred adventurers — heroic stance, cocky smirk, ready for the next fight.',
     height: 1,
     build: 1,
     skin: { light: '#e8b88a', mid: '#c68642', shade: '#8f5a2e', deep: '#5c3a1c' },
@@ -37,7 +37,7 @@ export const RACES: RaceDef[] = [
   {
     id: 'elf',
     name: 'Elf',
-    blurb: 'Tall and lithe, with moonlit skin and long pointed ears.',
+    blurb: 'Moonlit and uncanny — long ears, half-lidded eyes, beauty that feels a little wrong.',
     height: 1.06,
     build: 0.88,
     skin: { light: '#f2d4b8', mid: '#d4a882', shade: '#a87858', deep: '#6e4a38' },
@@ -49,7 +49,7 @@ export const RACES: RaceDef[] = [
   {
     id: 'dwarf',
     name: 'Dwarf',
-    blurb: 'Stout and steady — broad shoulders, full beard, short stature.',
+    blurb: 'Built like a forge anvil — wide stance, braided beard, eyes that say try me.',
     height: 0.82,
     build: 1.22,
     skin: { light: '#d4a070', mid: '#b07a48', shade: '#7a4e2e', deep: '#4a2e18' },
@@ -61,7 +61,7 @@ export const RACES: RaceDef[] = [
   {
     id: 'orc',
     name: 'Orc',
-    blurb: 'Powerful build, olive hide, tusks, and a heavy brow ridge.',
+    blurb: 'Green terror with a scar and a snarl — tusks out, fists ready, weirdly magnetic.',
     height: 1.04,
     build: 1.18,
     skin: { light: '#8fbf6a', mid: '#5a8a42', shade: '#3a5e2a', deep: '#243818' },
