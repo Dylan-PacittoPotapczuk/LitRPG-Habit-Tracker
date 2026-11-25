@@ -127,37 +127,22 @@ export function buildSprite(
   const weapon = equipped.weapon ? WEARABLES[equipped.weapon] : null
   const accessory = equipped.accessory ? WEARABLES[equipped.accessory] : null
 
-  // Ground disk
-  pix.stamp(
-    12,
-    58,
-    ['..######..', '.########.', '##########', '.########.'],
-    { '#': '#6b4a32', '.': '' },
-    'ground',
-  )
-  // fill with shade
-  for (let x = 14; x < 34; x++) {
-    for (let y = 59; y < 62; y++) {
-      if ((x + y) % 2 === 0) pix.put(x, y, '#5a3a28', 'ground')
-      else pix.put(x, y, '#7a5a40', 'ground')
-    }
-  }
-
   if (cape) drawCape(pix, cape.colors.primary, cape.colors.secondary)
 
   // Race body stamp (organic silhouette)
   drawRaceBody(pix, heroRace ?? 'human', skin, pant, tunic, hair, race.eye, race.lip, heroClass, accent)
 
-  // Chest gear overlay
-  if (chest) drawChestGear(pix, chest.id, chest.colors, accent)
+  // Chest gear: dwarf torso sits lower; tall races need belt higher on waist
+  const gearY = heroRace === 'dwarf' ? 8 : 0
+  const beltY = heroRace === 'dwarf' ? 31 : 22
+  if (chest) drawChestGear(pix, chest.id, chest.colors, accent, gearY, beltY)
 
   if (accessory?.id === 'crown-of-dawn') drawCrown(pix, accessory.colors)
   if (accessory?.id === 'rune-bracers' || accessory?.id === 'copper-ring') {
-    drawBracers(pix, accessory.colors)
+    drawBracers(pix, accessory.colors, gearY)
   }
   if (accessory?.id === 'verdant-boots') {
-    // recolor boots area
-    for (let y = 52; y < 58; y++) {
+    for (let y = 50; y < 56; y++) {
       for (let x = 14; x < 34; x++) {
         const i = y * SPRITE_W + x
         if (pix.zbuf[i] === Z.body) {
@@ -167,7 +152,60 @@ export function buildSprite(
     }
   }
 
-  if (weapon) drawWeapon(pix, weapon.id, weapon.colors)
+  if (weapon) drawWeapon(pix, weapon.id, weapon.colors, heroRace === 'dwarf' ? 6 : 0)
+
+  // Ground disk tucked under the lowest body/boot pixel
+  let footY = 0
+  for (let i = 0; i < pix.zbuf.length; i++) {
+    if (pix.zbuf[i] === Z.body) {
+      const y = (i / SPRITE_W) | 0
+      if (y > footY) footY = y
+    }
+  }
+  const gy = Math.min(SPRITE_H - 4, footY + 1)
+  pix.stamp(
+    12,
+    gy,
+    ['..######..', '.########.', '##########', '.########.'],
+    { '#': '#6b4a32', '.': '' },
+    'ground',
+  )
+  for (let x = 14; x < 34; x++) {
+    for (let y = gy + 1; y < gy + 4 && y < SPRITE_H; y++) {
+      if ((x + y) % 2 === 0) pix.put(x, y, '#5a3a28', 'ground')
+      else pix.put(x, y, '#7a5a40', 'ground')
+    }
+  }
+
+  // Slide figure down so the ground disk sits on the canvas floor (no empty gap below)
+  let maxY = 0
+  for (let i = 0; i < pix.zbuf.length; i++) {
+    if (pix.zbuf[i] >= 0) {
+      const y = (i / SPRITE_W) | 0
+      if (y > maxY) maxY = y
+    }
+  }
+  const shift = SPRITE_H - 1 - maxY
+  if (shift > 0) {
+    const nextRgba = new Uint8ClampedArray(pix.rgba.length)
+    const nextZ = new Int8Array(pix.zbuf.length).fill(-1)
+    for (let y = 0; y <= maxY; y++) {
+      for (let x = 0; x < SPRITE_W; x++) {
+        const si = y * SPRITE_W + x
+        if (pix.zbuf[si] < 0) continue
+        const di = (y + shift) * SPRITE_W + x
+        nextZ[di] = pix.zbuf[si]
+        const so = si * 4
+        const dout = di * 4
+        nextRgba[dout] = pix.rgba[so]
+        nextRgba[dout + 1] = pix.rgba[so + 1]
+        nextRgba[dout + 2] = pix.rgba[so + 2]
+        nextRgba[dout + 3] = pix.rgba[so + 3]
+      }
+    }
+    pix.rgba = nextRgba
+    pix.zbuf = nextZ
+  }
 
   pix.outlinePass()
   if (damaged) pix.applyDamage()
@@ -193,55 +231,79 @@ function drawRaceBody(
   const P = pant
   const T = tunic
   const U = shade(tunic, -30)
+  const V = shade(tunic, 20)
   const H = hair.mid
   const A = hair.light
   const B = hair.shade
   const E = eye
   const M = lip
-  const W = '#f5f0e6' // sclera
-  const K = '#0a0806' // pupil
+  const W = '#f5f0e6'
+  const K = '#0a0806'
   const boot = '#2a2018'
+  const bootHi = '#4a3830'
+  const ivory = '#f0e8d0'
+  const mouth = '#3a1810'
+
+  // All figures plant boots on the ground disk (~y54–57). Dense filled stamps — no stick limbs.
 
   if (race === 'elf') {
-    // Tall lithe ethereal — long ears, flowing hair, slight lean, half-lidded eyes
+    // TALL · SLENDER · LONG POINTED EARS · FLOWING SILVER HAIR
     pix.stamp(
-      10,
-      2,
+      4,
+      0,
       [
-        '......AAAAAA......',
-        '....AAAAAAAAAA....',
-        '...AAAHHHHHHAAA...',
-        '..AAHH......HHAA..',
-        '.AHH..LLLLLL..HHA.',
-        'AH...LLSSSSLL...HA',
-        'H...LSSSSSSSSL...H',
-        '....SSWESSSEWS....',
-        '....SS.KK..KK.SS..',
-        '....SS..SSSS..SS..',
-        '....SSS.DD.SSS....',
-        '....SSSSMMSSSS....',
-        '....SSSSSSSSSS....',
-        '...LSSSSSSSSSSL...',
-        '..LL..TTTTTT..LL..',
-        '.LL..TTUUUUTT..LL.',
-        'LL...TUUUUUUT...LL',
-        'L....TUUUUUUT....L',
-        '.....TTUUUUTT.....',
-        '......TTTTTT......',
-        '.....PP....PP.....',
-        '....PPP....PPP....',
-        '....PP......PP....',
-        '....PP......PP....',
-        '....PP......PP....',
-        '....PP......PP....',
-        '....PP......PP....',
-        '...PPP......PPP...',
-        '...bbb......bbb...',
-        '..bbbb......bbbb..',
+        // 28-wide · hair crown with irregular spikes (not a bowl)
+        '........A.A.H.A.A...........',
+        '......AAHAAHAAHAAHAA........',
+        '....AAHHHHHHHHHHHHHAA.......',
+        '...AHHH..HHHHHH..HHHA.......',
+        '..AHH..LLLLLLLLLL..HHA......',
+        // ears jut far past skull
+        'eeAH.LLSSSSSSSSSSLL.HAee....',
+        'eee.LSSSSSSSSSSSSSSL.eee....',
+        '.ee.SSSSSSSSSSSSSSSS.ee.....',
+        '..e.SSW.EE..EE.WSSSS.e......',
+        '....SS..KK..KK..SSSS........',
+        '....SSS..SSSS..SSSSS........',
+        '....SSSS..DD..SSSSSS........',
+        '....SSSSS.MM.SSSSSSS........',
+        '....SSSSSSSSSSSSSSSS........',
+        '.....LSSSSSSSSSSSSL.........',
+        // slender torso + thin arms glued on
+        '....LL.TTVVVVVTT.LL.........',
+        '...LLL.TTVUUUVTT.LLL........',
+        '..LLLL.TTVUUUVTT.LLLL.......',
+        '..LLL..TTVVVVVTT..LLL.......',
+        '..LL...TTTTTTTT...LL........',
+        '..L.....TTTTTT.....L........',
+        // long slender legs with knee breaks (not pipe-dolls)
+        '......PPPP..PPPP............',
+        '.....PPPPP..PPPPP...........',
+        '.....PPPP....PPPP...........',
+        '.....PPPP....PPPP...........',
+        '.....PPPP....PPPP...........',
+        '.....PPpP....PPpP...........',
+        '.....PPpP....PPpP...........',
+        '.....PPPP....PPPP...........',
+        '.....PPPP....PPPP...........',
+        '.....PPPP....PPPP...........',
+        '.....PPPP....PPPP...........',
+        '.....PPPP....PPPP...........',
+        '.....PPPP....PPPP...........',
+        '.....PPpP....PPpP...........',
+        '.....PPpP....PPpP...........',
+        '.....PPPP....PPPP...........',
+        '.....PPPP....PPPP...........',
+        '.....PPPP....PPPP...........',
+        '.....PPPPP..PPPPP...........',
+        '.....PPPPP..PPPPP...........',
+        '.....bbbbb..bbbbb...........',
+        '....bbbbBb..bBbbbb..........',
+        '....bbbbb....bbbbb..........',
       ],
       {
         A,
-        H: B,
+        H,
         L,
         S,
         W,
@@ -251,64 +313,72 @@ function drawRaceBody(
         M,
         T,
         U,
+        V,
         P,
+        p: shade(pant, -25),
         b: boot,
+        B: bootHi,
+        e: L,
         '.': '',
       },
       'body',
     )
-    // Long swept ears (weird beauty)
-    pix.stamp(6, 6, ['..L', '.LS', 'LS.', 'S..', 'S..'], { L, S, '.': '' }, 'head')
-    pix.stamp(37, 6, ['L..', 'SL.', '.LS', '..S', '..S'], { L, S, '.': '' }, 'head')
-    // Cascading side locks
+    // Extra ear tips (must read at a glance)
+    pix.stamp(0, 5, ['..e', '.ee', 'eee', 'ee.', 'e..', 'e..'], { e: L, '.': '' }, 'head')
+    pix.stamp(40, 5, ['e..', 'ee.', 'eee', '.ee', '..e', '..e'], { e: L, '.': '' }, 'head')
+    // Cascading shoulder locks (connected to skull hair)
     for (let i = 0; i < 28; i++) {
-      const wave = Math.round(Math.sin(i * 0.4) * 1)
-      pix.put(11 + wave, 14 + i, i % 2 ? A : H, 'hair')
-      pix.put(12 + wave, 14 + i, B, 'hair')
-      pix.put(35 - wave, 14 + i, i % 2 ? A : H, 'hair')
-      pix.put(36 - wave, 14 + i, B, 'hair')
+      const sway = Math.round(Math.sin(i * 0.4) * 1.2)
+      pix.put(8 + sway, 15 + i, i % 2 ? A : H, 'hair')
+      pix.put(9 + sway, 15 + i, B, 'hair')
+      pix.put(10 + sway, 15 + i, H, 'hair')
+      pix.put(37 - sway, 15 + i, i % 2 ? A : H, 'hair')
+      pix.put(38 - sway, 15 + i, B, 'hair')
+      pix.put(39 - sway, 15 + i, H, 'hair')
     }
-    // Class hat tweak for mage
     if (heroClass === 'mage') drawMageHat(pix, tunic, accent)
     if (heroClass === 'rogue') drawHood(pix, hair.shade)
     return
   }
 
   if (race === 'dwarf') {
-    // Stout rugged — wide, short legs, massive braided beard, bushy brows
+    // SHORT · WIDE · HUGE BRAIDED BEARD · stubby legs · sits low
     pix.stamp(
-      8,
-      10,
+      4,
+      14,
       [
-        '......AAAAAA......',
-        '....AAAAAAAAAAAA..',
-        '...AAAHHHHHHHAAA..',
-        '..AHH.LLLLLLLL.HHA',
-        '.AH.LLSSSSSSSSLL.A',
-        '.H.LSSSSSSSSSSSL.H',
-        '...SSWEKK..KKWES..',
-        '...SS..SSSSSS..SS.',
-        '...SSS.DDDD.SSS...',
-        '...SSSSMMMMSSSS...',
-        '..AAAAAAAAAAAAAA..',
-        '.AAAHHHHHHHHHHAAA.',
-        'AAHHHAAAAAAAHHHHAA',
-        'AHH..TTTTTTTT..HHA',
-        'HH..TTUUUUUUTT..HH',
-        'H...TUUUUUUUUT...H',
-        '....TTUUUUUUTT....',
-        '.....TTTTTTTT.....',
-        '....PPP....PPP....',
-        '...PPPP....PPPP...',
-        '...PPP......PPP...',
-        '...PPP......PPP...',
-        '...PPP......PPP...',
-        '..bbbb......bbbb..',
-        '.bbbbb......bbbbb.',
+        // 28-wide · mop + heavy brows
+        '......AAAAAAAAAAAA..........',
+        '....AAHHHHHHHHHHHHAA........',
+        '...AHHHLLLLLLLLLLHHHA.......',
+        '..AHHLLSSSSSSSSSSLLHHA......',
+        '..HH.LSSRRSSSSRSSL.HH.......',
+        '..H..SSWEKK..KKWESS.H.......',
+        '.....SS..SSSSSS..SS.........',
+        '.....SSS.DDDD.SSSS..........',
+        // BEARD blankets the chest
+        '....AAAAAAAAAAAAAAAA........',
+        '...AAHHHHHHHHHHHHHHAA.......',
+        '..AAHHAAAAAAAAAAAAHHAA......',
+        '.AAHH..TTTTTTTTTT..HHAA.....',
+        '.AHH..TTVVVVVVVVTT..HHA.....',
+        '.HH...TTVUUUUUUVTT...HH.....',
+        '.HH...TTVVVVVVVVTT...HH.....',
+        '.HH....TTTTTTTTTT....HH.....',
+        '..H.....TTTTTTTT.....H......',
+        // stubby wide legs — shortest race
+        '.....PPPPPP..PPPPPP.........',
+        '....PPPPPPP..PPPPPPP........',
+        '....PPPPPp....pPPPPP........',
+        '....PPPPPP....PPPPPP........',
+        '....PPPPPP....PPPPPP........',
+        '....bbbbbb....bbbbbb........',
+        '...bbbbbBb....bBbbbbb.......',
+        '...bbbbbb......bbbbbb.......',
       ],
       {
         A,
-        H: B,
+        H: hair.mid,
         L,
         S,
         W,
@@ -318,55 +388,81 @@ function drawRaceBody(
         M,
         T,
         U,
+        V,
         P,
+        p: shade(pant, -25),
+        R: B, // bushy brows
         b: boot,
+        B: bootHi,
         '.': '',
       },
       'body',
     )
-    // Beard braid rings
-    pix.put(18, 28, accent, 'hair')
-    pix.put(29, 28, accent, 'hair')
-    pix.put(18, 32, accent, 'hair')
-    pix.put(29, 32, accent, 'hair')
+    // Gold braid rings on beard
+    pix.put(14, 30, accent, 'hair')
+    pix.put(15, 30, shade(accent, 40), 'hair')
+    pix.put(32, 30, accent, 'hair')
+    pix.put(33, 30, shade(accent, 40), 'hair')
+    pix.put(14, 34, accent, 'hair')
+    pix.put(32, 34, accent, 'hair')
+    pix.put(15, 37, accent, 'hair')
+    pix.put(33, 37, accent, 'hair')
     if (heroClass === 'mage') drawMageHat(pix, tunic, accent)
     if (heroClass === 'rogue') drawHood(pix, hair.shade)
     return
   }
 
   if (race === 'orc') {
-    // Fierce weird — hunched bulk, tusks, scar, snarl, topknot
+    // GREEN · BROAD · TUSKS · SCAR · SNARL · TOPKNOT
     pix.stamp(
-      8,
       4,
+      2,
       [
-        '.........AA.......',
-        '........AAAA......',
-        '.......AAAAAA.....',
-        '......AHHHHHHA....',
-        '....LLLSSSSSSLLL..',
-        '...LLSSSSSSSSSSLL.',
-        '..LSSSSSSSSSSSSSL.',
-        '..SSXESKK..KKSEXSS',
-        '..SS..SSSSSS..SS..',
-        '..SSS.DDDDDD.SSS..',
-        '..SSSS......SSSS..',
-        '..SSStt....ttSSSS.',
-        '..SSS.MMMMMM.SSS..',
-        '...SSSSSSSSSSSS...',
-        '..LL.TTTTTTTT.LL..',
-        '.LL.TTUUUUUUTT.LL.',
-        'LL..TUUUUUUUUT..LL',
-        'L...TTUUUUUUTT...L',
-        '.....TTTTTTTT.....',
-        '....PPP....PPP....',
-        '...PPPP....PPPP...',
-        '...PPP......PPP...',
-        '...PPP......PPP...',
-        '...PPP......PPP...',
-        '...PPP......PPP...',
-        '..bbbb......bbbb..',
-        '.bbbbb......bbbbb.',
+        // 28-wide · topknot spike (not a hat)
+        '...........AA...............',
+        '..........AAAA..............',
+        '.........AAAAAA.............',
+        '........AHHHHHHA............',
+        '.......AHHHHHHHHA...........',
+        // wide green skull
+        '.....LLLSSSSSSSSSLLL........',
+        '....LLSSSSSSSSSSSSSLL.......',
+        '...LSSSXSSSSSSSSXSSSSL......',
+        '...SS.WESKK..KKSEW.SSS......',
+        '...SS..SSSSSSSS..SSSS.......',
+        '...SSS..DDDDDD..SSSSS.......',
+        // snarl cavity + upward tusks
+        '...SSSS.mmmmmm.SSSSSS.......',
+        '...SSSi........iSSSSS.......',
+        '...SSS.iMMMMMMi.SSSSS.......',
+        '...SSSS.iiiiii.SSSSSS.......',
+        '....SSSSSSSSSSSSSSSS........',
+        // bulky torso + thick arms
+        '...LL.TTTVVVVVTTT.LL........',
+        '..LLL.TTTVUUUVTTT.LLL.......',
+        '.LLLL.TTTVUUUVTTT.LLLL......',
+        '.LLL..TTTVVVVVTTT..LLL......',
+        '.LL...TTTTTTTTTT...LL.......',
+        '.L.....TTTTTTTT.....L.......',
+        // powerful thick legs with knee shade
+        '.....PPPPPP..PPPPPP.........',
+        '....PPPPPPP..PPPPPPP........',
+        '....PPPPPP....PPPPPP........',
+        '....PPPPPP....PPPPPP........',
+        '....PPPPpP....PpPPPP........',
+        '....PPPPpP....PpPPPP........',
+        '....PPPPPP....PPPPPP........',
+        '....PPPPPP....PPPPPP........',
+        '....PPPPPP....PPPPPP........',
+        '....PPPPPP....PPPPPP........',
+        '....PPPPpP....PpPPPP........',
+        '....PPPPPP....PPPPPP........',
+        '....PPPPPP....PPPPPP........',
+        '....PPPPPPP..PPPPPPP........',
+        '....PPPPPPP..PPPPPPP........',
+        '....bbbbbbb..bbbbbbb........',
+        '...bbbbbBbb..bbBbbbbb.......',
+        '...bbbbbbb....bbbbbbb.......',
       ],
       {
         A,
@@ -374,66 +470,83 @@ function drawRaceBody(
         L,
         S,
         X,
+        W,
         E,
         K,
         D,
         M,
-        t: '#efe6d4',
+        m: mouth,
+        i: ivory,
         T,
         U,
+        V,
         P,
+        p: shade(pant, -25),
         b: boot,
+        B: bootHi,
         '.': '',
       },
       'body',
     )
-    // Battle scar across eye
+    // Diagonal battle scar across cheek
     for (let i = 0; i < 10; i++) {
-      pix.put(16 + Math.floor(i / 2), 10 + i, X, 'head')
-      pix.put(17 + Math.floor(i / 2), 10 + i, D, 'head')
+      pix.put(14 + Math.floor(i / 2), 10 + i, X, 'head')
+      pix.put(15 + Math.floor(i / 2), 10 + i, D, 'head')
     }
-    // Open snarl fill
-    pix.put(20, 16, '#4a2020', 'head')
-    pix.put(21, 16, '#4a2020', 'head')
-    pix.put(22, 16, '#4a2020', 'head')
-    pix.put(23, 16, '#4a2020', 'head')
     if (heroClass === 'mage') drawMageHat(pix, tunic, accent)
     if (heroClass === 'rogue') drawHood(pix, hair.shade)
     return
   }
 
-  // Human — heroic adventurer, contrapposto lean, smirk, windblown hair
+  // HUMAN — heroic adventurer: windblown hair, clear face, cocky smirk, contrapposto
   pix.stamp(
-    10,
-    4,
+    6,
+    2,
     [
-      '.....AAAAAAA......',
-      '....AAAAAAAAAA....',
-      '...AAAHHHHHHAAA...',
-      '..AHH.LLLLLL.HHA..',
-      '.AH.LLSSSSSSLL.HA.',
-      '.H.LSSSSSSSSSSL.H.',
-      '...SSWESKK.SEWSS..',
-      '...SS..SSSS..SS...',
-      '...SSS.DD.SSS.....',
-      '...SSSS.M.SSSS....',
-      '...SSSSMMSSSS.....',
-      '....SSSSSSSS......',
-      '...L..TTTT..L.....',
-      '..LL.TTUUTT.LL....',
-      '.LL..TUUUUT..LL...',
-      'LL...TUUUUT...L...',
-      'L....TTUUTT.......',
-      '......TTTT........',
-      '.....PP...PPP.....',
-      '....PPP...PPP.....',
-      '....PP.....PP.....',
-      '....PP.....PP.....',
-      '....PP.....PP.....',
-      '....PP.....PP.....',
-      '....PP....PPP.....',
-      '...bbb....bbbb....',
-      '..bbbb....bbbbb...',
+      // 28-wide · messy windblown hair (spikes, not a bucket)
+      '.......A..AA.A.A............',
+      '.....AAHAAHAAHAAA...........',
+      '....AHHHHHHHHHHHHA..........',
+      '...AHHH..HHHH..HHHA.........',
+      '..AHH..LLLLLLLL..HHA........',
+      '..HH.LLSSSSSSSSLL.HH........',
+      '..H.LSSSSSSSSSSSSL.H........',
+      // clear eyes + soft smirk (no V-mouth)
+      '....SSWE.SS.EWSSSS..........',
+      '....SS..KKKK..SSSS..........',
+      '....SSS..DD..SSSSS..........',
+      '....SSSS.....SSSSS..........',
+      '....SSSSS.M.SSSSSS..........',
+      '....SSSSSSMMSSSSSS..........',
+      '.....SSSSSSSSSSSS...........',
+      // heroic torso — weight shifts right
+      '....LL.TTVVVVTT.LL..........',
+      '...LLL.TTVUUUVTT.LLL........',
+      '..LLLL.TTVUUUVTT..LL........',
+      '..LLL..TTVVVVVTT...L........',
+      '..LL...TTTTTTTT.............',
+      '..L.....TTTTTT..............',
+      // contrapposto: weight on right — thicker legs + knees
+      '......PPPP...PPPPP..........',
+      '.....PPPPP...PPPPPP.........',
+      '.....PPPP.....PPPPP.........',
+      '.....PPPP.....PPPPP.........',
+      '.....PPpP.....PPpPP.........',
+      '.....PPpP.....PPpPP.........',
+      '.....PPPP.....PPPPP.........',
+      '.....PPPP.....PPPPP.........',
+      '.....PPPP.....PPPPP.........',
+      '.....PPPP.....PPPPPP........',
+      '.....PPPP.....PPPPPP........',
+      '.....PPpP.....PPpPPP........',
+      '.....PPPP.....PPPPPP........',
+      '.....PPPP.....PPPPPP........',
+      '.....PPPP.....PPPPPP........',
+      '.....PPPPP...PPPPPPP........',
+      '.....PPPPP...PPPPPPP........',
+      '.....bbbbb...bbbbbbb........',
+      '....bbbBbB...bBbbbbb........',
+      '....bbbbb.....bbbbbb........',
     ],
     {
       A,
@@ -447,32 +560,34 @@ function drawRaceBody(
       M,
       T,
       U,
+      V,
       P,
+      p: shade(pant, -25),
       b: boot,
+      B: bootHi,
       '.': '',
     },
     'body',
   )
-  // Smirk lift on one side
+  // Cocky side-smirk (subtle, not a V)
   pix.put(26, 14, M, 'head')
-  pix.put(27, 13, M, 'head')
-  // Hand on hip (asym)
-  pix.stamp(30, 22, ['.LL', 'LL.', 'L..', 'SS.', '.S.'], { L, S, '.': '' }, 'body')
-  // Windblown fringe
+  pix.put(27, 14, shade(M, 25), 'head')
+  // Hand resting on hip — attached to right arm
+  pix.stamp(32, 22, ['LL.', 'LLS', 'LSS', '.SS', '..S'], { L, S, '.': '' }, 'body')
+  // Wind fringe spikes on hairline
   for (let i = 0; i < 8; i++) {
-    pix.put(14 + i, 6 + (i % 3), A, 'hair')
-    pix.put(15 + i, 7 + (i % 2), H, 'hair')
+    pix.put(14 + i, 3 + (i % 3), A, 'hair')
+    pix.put(15 + i, 4 + (i % 2), H, 'hair')
   }
   if (heroClass === 'mage') drawMageHat(pix, tunic, accent)
   if (heroClass === 'warrior') {
-    // short cropped sides
-    pix.stamp(10, 8, ['BB', 'BB'], { B, '.': '' }, 'hair')
-    pix.stamp(34, 8, ['BB', 'BB'], { B, '.': '' }, 'hair')
+    // short sideburns
+    pix.stamp(10, 10, ['HH', 'HH'], { H: B, '.': '' }, 'hair')
+    pix.stamp(34, 10, ['HH', 'HH'], { H: B, '.': '' }, 'hair')
   }
   if (heroClass === 'rogue') drawHood(pix, hair.shade)
   if (heroClass === 'ranger') {
-    // quiver strap hint
-    for (let i = 0; i < 12; i++) pix.put(14 + Math.floor(i / 4), 20 + i, shade(tunic, -50), 'chest')
+    for (let i = 0; i < 14; i++) pix.put(12 + Math.floor(i / 5), 20 + i, shade(tunic, -50), 'chest')
   }
 }
 
@@ -542,26 +657,26 @@ function drawChestGear(
   id: WearableId,
   colors: { primary: string; secondary: string; highlight?: string },
   accent: string,
+  yOff = 0,
+  beltY = 22,
 ) {
   const p = colors.primary
   const s = colors.secondary
   const h = colors.highlight ?? shade(p, 30)
   if (id === 'cloth-tunic') {
-    // light stitch details only — body already has tunic
-    for (let x = 18; x < 30; x += 2) pix.put(x, 22, s, 'chest')
+    for (let x = 18; x < 30; x += 2) pix.put(x, 20 + yOff, s, 'chest')
   } else if (id === 'leather-vest') {
-    // Open vest panels — not a face/shield blob
     pix.stamp(
       16,
-      18,
+      18 + yOff,
       [
         'pp........pp',
         'pps......spp',
-        'ppss....sspp',
-        'pp.s.h..s.pp',
+        'pp.s....s.pp',
+        'pp..shhs..pp',
+        'pp..ssss..pp',
         'pp.ssssss.pp',
-        'ppsssssssspp',
-        '.pppppppppp.',
+        '.ppsssssspp.',
         '..ss....ss..',
       ],
       { p, s, h, '.': '' },
@@ -570,7 +685,7 @@ function drawChestGear(
   } else if (id === 'iron-mail') {
     pix.stamp(
       15,
-      17,
+      16 + yOff,
       [
         '.phphphphph.',
         'phspspspsphp',
@@ -584,13 +699,12 @@ function drawChestGear(
       { p, s, h, '.': '' },
       'chest',
     )
-    // pauldrons
-    pix.stamp(12, 17, ['ppp', 'php', 'psp'], { p, h, s, '.': '' }, 'chest')
-    pix.stamp(33, 17, ['ppp', 'php', 'psp'], { p, h, s, '.': '' }, 'chest')
+    pix.stamp(12, 16 + yOff, ['ppp', 'php', 'psp'], { p, h, s, '.': '' }, 'chest')
+    pix.stamp(33, 16 + yOff, ['ppp', 'php', 'psp'], { p, h, s, '.': '' }, 'chest')
   } else if (id === 'ember-plate') {
     pix.stamp(
       15,
-      16,
+      15 + yOff,
       [
         '.pppppppppp.',
         'pphhhhhhhhpp',
@@ -605,13 +719,12 @@ function drawChestGear(
       { p, s, h, a: accent, '.': '' },
       'chest',
     )
-    pix.stamp(11, 16, ['ppp', 'php', 'hph'], { p, h, '.': '' }, 'chest')
-    pix.stamp(34, 16, ['ppp', 'php', 'hph'], { p, h, '.': '' }, 'chest')
+    pix.stamp(11, 15 + yOff, ['ppp', 'php', 'hph'], { p, h, '.': '' }, 'chest')
+    pix.stamp(34, 15 + yOff, ['ppp', 'php', 'hph'], { p, h, '.': '' }, 'chest')
   }
-  // belt buckle
-  pix.put(22, 30, accent, 'chest')
-  pix.put(23, 30, shade(accent, 40), 'chest')
-  pix.put(24, 30, accent, 'chest')
+  pix.put(22, beltY, accent, 'chest')
+  pix.put(23, beltY, shade(accent, 40), 'chest')
+  pix.put(24, beltY, accent, 'chest')
 }
 
 function drawCrown(pix: Pix, colors: { primary: string; secondary: string; highlight?: string }) {
@@ -626,37 +739,43 @@ function drawCrown(pix: Pix, colors: { primary: string; secondary: string; highl
   )
 }
 
-function drawBracers(pix: Pix, colors: { primary: string; secondary: string; highlight?: string }) {
+function drawBracers(
+  pix: Pix,
+  colors: { primary: string; secondary: string; highlight?: string },
+  yOff = 0,
+) {
   const p = colors.primary
   const h = colors.highlight ?? shade(p, 30)
-  pix.stamp(12, 28, ['ppp', 'php', 'ppp'], { p, h, '.': '' }, 'accessory')
-  pix.stamp(33, 28, ['ppp', 'php', 'ppp'], { p, h, '.': '' }, 'accessory')
+  pix.stamp(12, 28 + yOff, ['ppp', 'php', 'ppp'], { p, h, '.': '' }, 'accessory')
+  pix.stamp(33, 28 + yOff, ['ppp', 'php', 'ppp'], { p, h, '.': '' }, 'accessory')
 }
 
 function drawWeapon(
   pix: Pix,
   id: WearableId,
   colors: { primary: string; secondary: string; highlight?: string },
+  yOff = 0,
 ) {
   const p = colors.primary
   const s = colors.secondary
   const h = colors.highlight ?? shade(p, 40)
   if (id === 'lantern-staff') {
     pix.stamp(
-      36,
-      8,
-      ['..ss..', '.shhs.', 'sshhss', '.shhs.', '..ss..', '..ss..', '..ss..', '..ss..', '..ss..', '..ss..', '..ss..', '..ss..'],
+      38,
+      6 + yOff,
+      ['..ss..', '.shhs.', 'sshhss', '.shhs.', '..ss..', '..ss..', '..ss..', '..ss..', '..ss..', '..ss..', '..ss..', '..ss..', '..ss..'],
       { s, h, '.': '' },
       'weapon',
     )
   } else if (id === 'hunter-bow') {
     pix.stamp(
-      34,
-      14,
+      38,
+      16 + yOff,
       [
         '...p..',
         '..p.w.',
         '.p..w.',
+        'p...w.',
         'p...w.',
         'p...w.',
         'p...w.',
@@ -668,11 +787,11 @@ function drawWeapon(
       'weapon',
     )
   } else {
-    // blade
+    // blade held at right hip/hand
     pix.stamp(
-      36,
-      12,
-      ['..h.', '.hh.', 'hhh.', '.hh.', '.hh.', '.hh.', '.hh.', '.ss.', 'ssss', '.ss.', '.ss.', '..h.'],
+      38,
+      14 + yOff,
+      ['..h.', '.hh.', 'hhh.', '.hh.', '.hh.', '.hh.', '.hh.', '.hh.', '.ss.', 'ssss', '.ss.', '.ss.', '..h.'],
       { h, s, '.': '' },
       'weapon',
     )
