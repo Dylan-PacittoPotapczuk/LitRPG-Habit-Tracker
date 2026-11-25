@@ -31,7 +31,7 @@ npm run preview
 
 - **Race + class select** — Human / Elf / Dwarf / Orc, then Warrior / Mage / Ranger / Rogue; soft habit XP bias; respec both in Settings
 - **Today** — brand hero, vibe check (5 funny feeling-emojis, once/day), 10 recurring habits, optional todos, XP/HP/streak bars, atonement after a miss
-- **Hero** — classic ~32×48 layered pixel avatar (sheet-style outlines, race silhouettes, idle bob), armory grid (chest / weapon / cape / accessory), badges, live equip preview
+- **Hero** — dense ~256×400 layered pixel avatar (facial detail, fabric folds, armor rivets, race silhouettes, idle bob), armory grid (chest / weapon / cape / accessory), badges, live equip preview
 - **Loot unlocks** — ~13 wearables via level, streak, or full-clear loot rolls; miss-day scuffs gear until healed
 - **Chronicle** — completion / mood / XP charts + weekly summary (no heatmap)
 - **Settings** — race + class respec, demo reset/seed, JSON export, factory reset, install notes
