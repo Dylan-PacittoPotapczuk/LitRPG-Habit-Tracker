@@ -157,10 +157,16 @@ function buildSprite(
   const tw = L.stout ? 10 : 8
   const tx = L.stout ? 11 : 12
 
-  // Ground under feet
-  buf.stamp(9, 41, ['..######..', '.########.', '..######..'], { '#': GROUND }, 'ground')
-  buf.put(11, 42, GROUND_EDGE, 'ground')
-  buf.put(20, 42, GROUND_EDGE, 'ground')
+  // Ground disk touching boots (sheet-style ellipse)
+  buf.stamp(
+    8,
+    L.bootY + 3,
+    ['...######...', '..########..', '.##########.', '..########..', '...######...'],
+    { '#': GROUND },
+    'ground',
+  )
+  buf.put(10, L.bootY + 4, GROUND_EDGE, 'ground')
+  buf.put(21, L.bootY + 4, GROUND_EDGE, 'ground')
 
   // Cape behind torso
   if (cape) {
@@ -288,12 +294,9 @@ function drawHead(
 
   // Ears
   if (race === 'elf') {
-    buf.put(12, headY + 1, S1, 'head')
-    buf.put(12, headY, S1, 'head')
-    buf.put(11, headY, S1, 'head')
-    buf.put(19, headY + 1, S, 'head')
-    buf.put(19, headY, S, 'head')
-    buf.put(20, headY, S, 'head')
+    // Long pointed ears — clear silhouette like the sheet
+    buf.stamp(10, headY - 1, ['..1', '.S.', 'S..', 'S..'], { '1': S1, S }, 'head')
+    buf.stamp(19, headY - 1, ['1..', '.S.', '..S', '..S'], { '1': S1, S }, 'head')
   } else if (race === 'orc') {
     buf.put(11, headY + 2, S, 'head')
     buf.put(20, headY + 2, S2, 'head')
